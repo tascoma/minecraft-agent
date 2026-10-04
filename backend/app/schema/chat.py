@@ -41,6 +41,14 @@ class Death(BaseModel):
     seconds_ago: int
 
 
+class Task(BaseModel):
+    """The job the bot is busy with, like gathering."""
+
+    description: str
+    # e.g. "12/20"; None until the job has made progress.
+    progress: str | None = None
+
+
 class BotState(BaseModel):
     """Snapshot of the bot's situation, sent by the bot with each chat message."""
 
@@ -61,6 +69,7 @@ class BotState(BaseModel):
     player_distance: float | None = None
     # Set for 5 minutes after the bot dies, while its dropped items can still be picked up.
     last_death: Death | None = None
+    task: Task | None = None
 
 
 class ChatRequest(BaseModel):
@@ -70,21 +79,35 @@ class ChatRequest(BaseModel):
     state: BotState | None = None
 
 
+class ProtectedSpot(BaseModel):
+    """A saved place the bot keeps a zone around where it never digs or places blocks."""
+
+    x: int
+    y: int
+    z: int
+    dimension: str
+
+
 class BotAction(BaseModel):
     """Something the bot should do in the world besides chatting.
 
     follow/come/teleport: `username` is the player. goto: `x`, `z`, optional `y`, and an optional `label` the bot
-    uses when it reports arriving ("Made it to home.").
+    uses when it reports arriving ("Made it to home."). collect: `item` and `count`. give: `username`, `item`,
+    and `count` (None for all of it).
     """
 
-    type: Literal['follow', 'stay', 'come', 'goto', 'teleport', 'recover']
+    type: Literal['follow', 'stay', 'come', 'goto', 'teleport', 'recover', 'collect', 'give']
     username: str | None = None
     x: int | None = None
     y: int | None = None
     z: int | None = None
     label: str | None = None
+    item: str | None = None
+    count: int | None = None
 
 
 class ChatResponse(BaseModel):
     reply: str
     actions: list[BotAction] = []
+    # Sent with every reply so the bot's no-digging zones match the saved places.
+    protected_places: list[ProtectedSpot] = []

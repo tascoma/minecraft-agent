@@ -4,8 +4,10 @@ import pytest
 
 from app.agents.agent import (
     ChatDeps,
+    collect,
     come_here,
     forget_place,
+    give_items,
     go_to,
     go_to_place,
     recover_items,
@@ -14,7 +16,8 @@ from app.agents.agent import (
     stay_here,
     teleport_to_player,
 )
-from app.schema.chat import BotAction
+from app.schema.chat import BotAction, ProtectedSpot
+from app.services.places import protected_spots
 from app.services.places import Place, PlaceStore
 from tests.test_world import make_state
 
@@ -94,3 +97,20 @@ def test_saved_places_in_instructions(store):
     assert saved_places(c) == (
         'Saved places: home at (10, 64, 27), 30 blocks away; fortress at (1, 70, 1) in the Nether.'
     )
+
+
+def test_collect_and_give_actions(store):
+    c = ctx(store)
+    collect(c, item='cobblestone', count=20)
+    give_items(c, item='coal')
+    give_items(c, item='oak_log', count=5)
+    assert c.deps.actions == [
+        BotAction(type='collect', item='cobblestone', count=20),
+        BotAction(type='give', username='Steve', item='coal'),
+        BotAction(type='give', username='Steve', item='oak_log', count=5),
+    ]
+
+
+def test_saved_places_become_protected_spots(store):
+    store.save(Place(name='home', x=20, y=65, z=30, dimension='overworld'))
+    assert protected_spots(store) == [ProtectedSpot(x=20, y=65, z=30, dimension='overworld')]

@@ -54,7 +54,7 @@ The bot does one thing at a time: follow, stand still, or walk somewhere. When i
 | Swim, climb ladders, open doors and gates | Reflex | `bot/movements.js` (wooden doors and gates; iron ones need redstone) | ✅ |
 | Avoid lava, cliffs and deep water | Reflex | `bot/movements.js`: lava avoided, `maxDropDown` 3, `liquidCost` 5 | ✅ |
 | Teleport to the player ("tp to me") | Tool | `teleport_to_player`, `/tp`; needs Allow Cheats on | ✅ |
-| Build up or bridge across gaps when stuck | Reflex | `Movements.scafoldingBlocks`; waits for Phase 4 so it has blocks | 🔲 |
+| Build up or bridge across gaps when stuck | Reflex | `Movements.scafoldingBlocks` with dirt or cobblestone; during gathering jobs only, never while following and never in protected areas | ✅ |
 | Stop whatever it's doing ("stop") | Tool | `stay_here` | ✅ |
 
 ## Phase 3: Staying alive (reflexes)
@@ -76,16 +76,23 @@ Tested in game with a second player running commands (`/give`, `/damage`, `/summ
 
 ## Phase 4: Gathering resources
 
+Gathering runs as a **job** (`bot/tasks.js`): one at a time, cancelled by "stop" or any new command. The bot reports progress and the result in chat itself, and the current job is in the state snapshot so the agent can say what it's doing.
+
+The bot digs only while gathering, never within 16 blocks (horizontally) of a saved place, and never through blocks a player probably placed (planks, glass, bricks, doors, chests, beds, farmland and so on; see `isManMade` in `bot/movements.js`). While following or walking it never digs or places blocks.
+
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
-| Chop trees ("get 10 logs") | Tool | `mineflayer-collectblock` | 🔲 |
-| Use the right tool for each block | Reflex | `mineflayer-tool` | 🔲 |
-| Mine a block type ("get 20 cobblestone", "mine that iron") | Tool | `mineflayer-collectblock` | 🔲 |
-| Pick up dropped items nearby | Reflex | `GoalNear` to item entities | 🔲 |
-| Give items to the player ("give me your coal") | Tool | `bot.toss` near the player | 🔲 |
-| Collect sand, gravel, clay, flowers and other surface blocks | Tool | `mineflayer-collectblock` | 🔲 |
+| Chop trees ("get 10 logs") | Tool | `collect`, `mineflayer-collectblock` | ✅ |
+| Use the right tool for each block | Reflex | `mineflayer-tool` (via collectblock) | ✅ |
+| Mine a block type ("get 20 cobblestone", "get some coal"); says which pickaxe it's missing | Tool | `collect`, block drop data from `minecraft-data` | ✅ |
+| Collect sand, gravel, dirt, clay and other surface blocks | Tool | `collect` | ✅ |
+| Pick up the drops of blocks it breaks | Reflex | `mineflayer-collectblock` | ✅ |
+| Pick up any dropped items nearby | Reflex | Not built: it would also grab the player's drops | 🔲 |
+| Give items to the player ("give me your coal") | Tool | `give_items`, `bot.toss` | ✅ |
 | Strip-mine or branch-mine at a chosen Y level | Tool + skill | `bot.dig` + pathfinder | 🔲 |
-| Never mine through the player's builds | Reflex | protected areas, `Movements.canDig` | 🔲 |
+| Never mine through the player's builds | Reflex | protected areas around saved places, man-made block list | ✅ |
+
+Tested in game: logs, cobblestone without and with a pickaxe, stopping a job, and giving items. Nothing was dug inside the protected area around home.
 
 ## Phase 5: Crafting and smelting
 
@@ -162,6 +169,7 @@ Multi-step goals that combine everything above. The agent plans them with skills
 
 | Functionality | Type | Status |
 |---|---|---|
+| Remember the last few things said, so follow-ups like "get it" work | Memory | ✅ |
 | Remember things about the player and past sessions (preferences, base locations, what happened) | Memory | 🔲 |
 | Give useful tips without being asked, at a sensible rate ("night in 1 minute") | Reflex → chat | 🔲 |
 | Split up work ("you mine, I'll build") and report back when done | Tool + task system | 🔲 |
@@ -174,16 +182,16 @@ Multi-step goals that combine everything above. The agent plans them with skills
 
 Phases 4 onward need these before they work well:
 
-1. **Task system.** Actions like "get 20 cobblestone" take minutes, not milliseconds. The bot needs a queue of long-running tasks that can be cancelled and that report progress and results back to the agent. Today an action is fire-and-forget in the `/chat` reply.
+1. **Task system.** *Partly done.* Jobs like "get 20 cobblestone" run one at a time, can be cancelled, and report progress and results in chat (`bot/tasks.js`). Still to come: a queue of several jobs, and telling the agent when a job ends (needs bot → backend events).
 2. **Bot → backend events.** The bot reports things that happen (task finished, under attack, low health) so the agent can react, not only when the player chats. Each event costs tokens, so they must be rate-limited and only sent when the agent needs to decide something.
 3. **Persistent memory.** Waypoints, chest contents and player notes need to survive restarts. A small JSON or SQLite file in the backend is enough to start with.
-4. **Safety rules.** Never attack players, never dig inside protected areas, never take from the player's chests unless asked. Enforced in the bot, not left to the model.
-5. **Tests.** Unit-test tools with fake bot state; run a local offline server for end-to-end checks.
+4. **Safety rules.** Never attack players, never dig inside protected areas (done), never take from the player's chests unless asked. Enforced in the bot, not left to the model.
+5. **Tests.** *Done for Phases 1–4:* backend unit tests (`uv run pytest`), bot unit tests (`npm test`), and in-game checks with a second player (`npm run check:survival`, `npm run check:gathering`). Each new phase should add to all three.
 
 ## Suggested order
 
-1. Phase 1 (world awareness) and the task system. Every later tool depends on them.
-2. Phase 3 (staying alive) and Phase 6 reflexes (fighting back), so the bot can survive while doing work.
-3. Phases 4 and 5 (gathering and crafting), which is when the bot starts to be useful.
+1. ~~Phase 1 (world awareness) and the task system.~~ Done; the task system runs one job at a time.
+2. ~~Phase 3 (staying alive)~~ done. Phase 6 reflexes (fighting back) are next, so the bot can survive while doing work.
+3. ~~Phase 4 (gathering)~~ done. Phase 5 (crafting) next, which is when the bot starts to be useful on its own (it can't even make a pickaxe yet).
 4. Phases 7–9 (farming, building, base).
 5. Phases 10–11 (long-term goals and companionship).

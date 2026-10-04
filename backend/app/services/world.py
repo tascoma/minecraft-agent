@@ -70,6 +70,15 @@ def describe_food(food: int) -> str:
 ITEM_DESPAWN_SECONDS = 300
 
 
+TOOL_SUFFIXES = ('_pickaxe', '_axe', '_shovel', '_hoe', '_sword')
+
+
+def describe_tools(state: BotState) -> str:
+    """The bot's tools, so the agent knows what it can mine without checking the inventory."""
+    tools = sorted({i.name for i in state.inventory if i.name.endswith(TOOL_SUFFIXES)})
+    return ', '.join(tools) if tools else 'none'
+
+
 def describe_status(state: BotState) -> str:
     """One line with the essentials, added to the agent's instructions on every run."""
     held = state.held_item or 'nothing'
@@ -77,8 +86,12 @@ def describe_status(state: BotState) -> str:
         f'Your status: health {state.health:g}/20 ({describe_health(state.health)}), '
         f'food {state.food}/20 ({describe_food(state.food)}), '
         f'at {format_position(state.position)} in {describe_dimension(state.dimension)}, '
-        f'{describe_time(state.time_of_day)}, {describe_weather(state)}, holding {held}.'
+        f'{describe_time(state.time_of_day)}, {describe_weather(state)}, holding {held}, '
+        f'tools: {describe_tools(state)}.'
     )
+    if task := state.task:
+        progress = f' ({task.progress})' if task.progress else ''
+        status += f' You are busy {task.description}{progress}.'
     if death := state.last_death:
         left = max(0, (ITEM_DESPAWN_SECONDS - death.seconds_ago) // 60)
         status += (

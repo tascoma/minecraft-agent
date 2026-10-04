@@ -1,5 +1,6 @@
 // Builds the snapshot of the bot's situation that is sent to the backend with every chat.
 import { lastDeathInfo } from './survival.js'
+import { currentTask } from './tasks.js'
 
 // How far the bot looks for blocks and entities, in blocks.
 const scanRadius = 32
@@ -86,5 +87,7 @@ export function snapshot(bot, speaker) {
     player_position: speakerEntity ? point(speakerEntity.position) : null,
     player_distance: speakerEntity ? round1(speakerEntity.position.distanceTo(me)) : null,
     last_death: deathSnapshot(),
+    // The job the bot is doing, like {description: "getting 20 cobblestone", progress: "12/20"}.
+    task: currentTask(),
   }
 }

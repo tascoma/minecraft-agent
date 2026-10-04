@@ -65,7 +65,8 @@ The **agent** is the decision-maker: one `pydantic_ai.Agent` in `backend/app/age
 
 - **Instructions**: who it is (a friendly companion) and how to reply (short, plain text).
 - **The message**: `"TScoms23: follow me"`.
-- **Deps**: per-request data (`ChatDeps`: who's talking, plus a list where tools record actions).
+- **Deps**: per-request data (`ChatDeps`: who's talking, the bot's state, saved places, and a list where tools record actions).
+- **Recent conversation**: the player's last 5 exchanges, including the tool calls, forgotten after 10 minutes of quiet (`services/memory.py`). That's what makes "get it" after "there's coal below us" work. Tool calls have to stay in: with the replies alone, the model learns that saying "on my way!" is enough and stops calling tools.
 - **Tools and skills** it may use.
 
 It sends all of this to Claude, runs any tools Claude asks for, and repeats until Claude produces a final text reply. One player message is one **agent run**, which may make several model requests.
@@ -113,8 +114,8 @@ Following the player is a reflex: `mineflayer-pathfinder` keeps the bot within 3
 
 The survival reflexes in `bot/survival.js` are the same kind of thing: eating, putting on armor, backing off from mobs when hurt, getting out of lava, fire and deep water, and sleeping when you sleep. Two rules keep them from fighting with what you asked for:
 
-- **Your command wins.** Any action from the agent cancels a running reflex (`survival.cancel()`).
-- **A reflex finishes the job, then hands back.** While one is driving, the follow logic stays out of the way (`survival.busy()`); when it's done, the bot goes back to following or standing still (`resume()`).
+- **Your command wins.** Any action from the agent cancels a running reflex (`survival.cancel()`) and the current job (`cancelTask()`).
+- **A reflex finishes, then hands back.** While one is driving, the follow logic stays out of the way (`survival.busy()`); when it's done, the bot goes back to following or standing still (`resume()`). If a reflex interrupts a gathering job (say, backing off from a zombie), the job waits and then carries on.
 
 Use a reflex when the behavior is:
 
@@ -131,7 +132,7 @@ A **functionality** is something the player experiences, such as "the bot follow
 | Follows me around | Pathfinder keeps 3 blocks away | `follow_player`, `stay_here` toggle it | — |
 | Survives the first night *(today: advice only)* | — | — | `survive-first-night` |
 | Stays alive while playing | Eat, wear armor, back off when hurt, sleep when you sleep | `recover_items` after dying | — |
-| Gets me 10 logs *(planned)* | Auto-equip axe | `collect_block("oak_log", 10)` | — |
+| Gets me 10 logs | Use the right tool, pick up drops, back off if hurt | `collect("log", 10)` | — |
 | Gets a full set of iron gear *(planned)* | Eat, fight back, pick up drops | `mine_block`, `craft_item`, `smelt` | `iron-gear` |
 
 The full list is in [survival-functionality-plan.md](survival-functionality-plan.md).
@@ -199,6 +200,10 @@ bot/
   alerts.js                  chat warnings: low health, creeper nearby, nightfall
   movements.js               pathfinder rules: no digging, safe drops, doors and gates
   survival.js                reflexes: eat, armor, back off when hurt, escape lava/fire/water, sleep, item recovery
+  tasks.js                   the current job (one at a time, cancellable, with progress)
+  gathering.js               collect and give jobs: what to break for an item, protected areas
+  test/                      unit tests (npm test), no Minecraft needed
+  scripts/                   in-game checks with a second player (npm run check:*)
   patches/                   fixes to npm packages, applied by patch-package on npm install
 backend/app/
   main.py                    FastAPI app, sets up logging at startup
@@ -209,13 +214,14 @@ backend/app/
   routes/chat.py             POST /chat: runs the agent, logs, returns reply + actions
   services/world.py          turns the bot's state snapshot into text for the agent
   services/places.py         named places, saved to backend/data/places.json
+  services/memory.py         each player's recent exchanges, in memory only
 backend/data/                things the agent remembers between runs (gitignored)
   schema/chat.py             ChatRequest, ChatResponse, BotAction
 skills/
   <name>/SKILL.md            playbooks the agent loads on demand
 backend/logs/
   agent.log                  agent runs: messages, tool calls, replies, tokens
-  bot.log                    bot actions: joins, chat, follow/stay, deaths, errors
+  bot.log                    bot actions: joins, chat, movement, reflexes, jobs and blocks dug, deaths, errors
   bot-console.log            raw bot console output (library warnings)
 ```
 
@@ -230,11 +236,13 @@ Everything between the two processes goes through `POST /chat`:
              "dimension": "overworld", "time_of_day": 6000, "raining": false, "thundering": false,
              "held_item": null, "inventory": [...], "nearby_blocks": [...], "nearby_entities": [...],
              "player_position": {...}, "player_distance": 4.5,
-             "last_death": null } }  // or {position, dimension, seconds_ago} for 5 minutes after dying
+             "last_death": null,      // or {position, dimension, seconds_ago} for 5 minutes after dying
+             "task": null } }         // or {description: "getting 20 cobblestone", progress: "12/20"}
 
 // response (backend → bot)
 { "reply": "Got it!", "actions": [{ "type": "stay", "username": null }] }
-// action types: follow, stay, come, goto (x, y?, z, label?), teleport, recover
+// action types: follow, stay, come, goto (x, y?, z, label?), teleport, recover,
+//               collect (item, count, protect), give (username, item, count?)
 ```
 
 When something fails, the backend answers with an error status and `{ "error": "Claude is rate limiting me. Try again in a moment." }`. The message is written for the player (`app/core/errors.py`). The bot says it in chat as `Error: ...` and writes the full details to the logs. The bot reports its own failures the same way: backend unreachable or slow, an action that throws, an unexpected crash. Repeats of the same error are muted for 10 seconds.
@@ -286,7 +294,7 @@ flowchart LR
     EVR <--> MEM
 ```
 
-1. **Task queue in the bot.** "Mine 20 cobblestone" takes minutes. Actions become tasks with an id, progress, cancel, and a result. `stop` cancels the current task.
+1. **Task queue in the bot.** *Partly done:* one job at a time with progress, cancel and a result in chat (`bot/tasks.js`). A queue of several jobs is still to come.
 2. **State snapshot** ✅. Each request includes health, hunger, position, time, inventory and nearby points of interest, so the agent decides with real information instead of guessing.
 3. **Events endpoint.** The bot calls `POST /events` when something needs a decision (a task finished, it's under attack). Events cost tokens, so the bot handles anything a reflex can, and rate-limits the rest.
 4. **Memory.** Named places are done (`services/places.py`); the bot also remembers where it last died, in memory only. Still to come: chest contents and notes about the player, stored by the backend so they survive restarts.
@@ -302,3 +310,11 @@ flowchart LR
 - After opening a gate or door, it stays in "placing a block" mode. If the bot carries dirt or cobblestone, it then throws on every tick. `bot/patches/mineflayer-pathfinder+2.4.5.patch` fixes that, and `patch-package` reapplies it on every `npm install`.
 
 If you upgrade `mineflayer-pathfinder`, check whether the patch is still needed. `npm install` fails loudly if it no longer applies.
+
+---
+
+## 8. Limits that keep the bot stable
+
+- **One block at a time, 45 seconds each.** A gathering job gives up on a block it can't reach in 45 seconds and tries another, so the pathfinder can't stall a job by re-planning forever.
+- **Path search radius during jobs.** With digging allowed, almost every block is a possible route, and an unbounded path search ran the bot out of memory (4 GB) once. During jobs the pathfinder only searches 80 blocks around the bot; targets are never more than 48 away.
+- **Dying cancels the job.** The items are gone and the bot respawns somewhere else.

@@ -20,7 +20,7 @@ def test_status_line():
     status = world.describe_status(make_state())
     assert status == (
         'Your status: health 17.5/20 (healthy), food 14/20 (a bit hungry, not healing), at (10, 64, -3) in the Overworld, '
-        'day, about 6 min until night, clear, holding stone_pickaxe.'
+        'day, about 6 min until night, clear, holding stone_pickaxe, tools: none.'
     )
 
 
@@ -82,3 +82,17 @@ def test_recent_death_in_status():
     assert world.describe_status(state).endswith(
         'You died 1 min ago at (5, 40, 9) in the Overworld; your dropped items vanish in about 3 min.'
     )
+
+
+def test_current_task_in_status():
+    state = make_state(task={'description': 'getting 20 cobblestone', 'progress': '12/20'})
+    assert 'You are busy getting 20 cobblestone (12/20).' in world.describe_status(state)
+
+
+def test_tools_in_status():
+    state = make_state(inventory=[
+        {'name': 'stone_pickaxe', 'count': 1},
+        {'name': 'cobblestone', 'count': 12},
+        {'name': 'wooden_axe', 'count': 1},
+    ])
+    assert 'tools: stone_pickaxe, wooden_axe.' in world.describe_status(state)

@@ -3,9 +3,11 @@ import fs from 'node:fs'
 import mineflayer from 'mineflayer'
 import pathfinderPkg from 'mineflayer-pathfinder'
 import { installAlerts } from './alerts.js'
-import { CompanionMovements } from './movements.js'
+import { installGathering } from './gathering.js'
+import { CompanionMovements, setProtectedSpots } from './movements.js'
 import { snapshot } from './state.js'
 import { installSurvival } from './survival.js'
+import { cancelTask, currentTask } from './tasks.js'
 
 const { pathfinder, goals } = pathfinderPkg
 
@@ -84,6 +86,20 @@ function describeFetchError(err) {
   return cause ? `${err.message}: ${cause.code ?? cause.message}` : err.message
 }
 
+// Load the saved places so the no-digging zones are right before anyone chats. Chat replies keep
+// them up to date after that.
+async function loadProtectedSpots() {
+  try {
+    const res = await fetch(`${backendUrl}/places`, { signal: AbortSignal.timeout(5000) })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const spots = await res.json()
+    setProtectedSpots(spots)
+    log('INFO', `protecting ${spots.length} saved place(s) from digging`)
+  } catch (err) {
+    log('WARN', `couldn't load saved places from the backend (${describeFetchError(err)}); none protected until the next chat`)
+  }
+}
+
 // Chat-ready message for a failed backend request.
 async function backendErrorMessage(err, res) {
   if (err.name === 'TimeoutError') return 'my backend took too long to answer. Try again?'
@@ -101,12 +117,14 @@ let companion = null
 let spawned = false
 let reconnectDelay = reconnectBaseMs
 let bot
-// Survival reflexes for the current connection (see survival.js).
+// Survival reflexes and gathering jobs for the current connection (see survival.js, gathering.js).
 let survival = null
+let gathering = null
 
 function updateFollowGoal() {
-  // A reflex (backing off, sleeping, fetching items) is driving; it resumes following when done.
-  if (survival?.busy()) return
+  // A reflex (backing off, sleeping, fetching items) or a job (gathering) is driving; it resumes
+  // following when done.
+  if (survival?.busy() || currentTask()) return
   const entity = followTarget && bot.players[followTarget]?.entity
   // The player's entity is missing while they're out of range; entitySpawn retries when they come back.
   if (entity) bot.pathfinder.setGoal(new goals.GoalFollow(entity, followRange), true)
@@ -188,22 +206,27 @@ function goTo({ x, y, z, label }) {
   walkTo(goal, { place, arrived: `Made it to ${place}.` })
 }
 
-// Go back to what the player last asked for after a reflex is done.
+// Go back to what the player last asked for after a reflex or job is done. If a job is still
+// running (a reflex interrupted it), the job carries on by itself.
 function resume() {
+  if (currentTask()) return
   if (followTarget) updateFollowGoal()
   else bot.pathfinder.setGoal(null)
 }
 
 function runAction(action) {
   try {
-    // The player's command wins over whatever reflex is running.
+    // The player's command wins over whatever reflex or job is running.
     survival?.cancel()
+    cancelTask()
     if (action.type === 'follow') follow(action.username)
     else if (action.type === 'stay') stay()
     else if (action.type === 'come') come(action.username)
     else if (action.type === 'goto') goTo(action)
     else if (action.type === 'teleport') teleport(action.username)
     else if (action.type === 'recover') survival.recoverItems()
+    else if (action.type === 'collect') gathering.collect(action)
+    else if (action.type === 'give') gathering.give(action)
     else {
       log('WARN', `unknown action: ${JSON.stringify(action)}`)
       reportError(`I don't know how to do "${action.type}" yet. Is the bot out of date?`)
@@ -234,6 +257,7 @@ function connect() {
     spawned = true
     reconnectDelay = reconnectBaseMs
     bot.pathfinder.setMovements(new CompanionMovements(bot))
+    loadProtectedSpots()
     say('Hi! I am here.')
     // After a reconnect, keep doing what we were doing: follow the same player, or stay put.
     if (followTarget) follow(followTarget)
@@ -243,6 +267,7 @@ function connect() {
     }
     installAlerts(bot, say)
     survival = installSurvival(bot, { say, log, companion: () => companion, resume })
+    gathering = installGathering(bot, { say, log, survival, resume })
   })
 
   bot.on('entitySpawn', (entity) => {
@@ -275,18 +300,24 @@ function connect() {
       reportError(await backendErrorMessage(err, res))
       return
     }
-    const { reply, actions = [] } = await res.json()
+    const { reply, actions = [], protected_places: protectedPlaces } = await res.json()
+    setProtectedSpots(protectedPlaces)
     say(reply)
     actions.forEach(runAction)
   }
 
-  bot.on('death', () => log('WARN', 'died'))
+  bot.on('death', () => {
+    log('WARN', 'died')
+    // The items are gone and the bot respawns far away; a job can't sensibly carry on.
+    cancelTask()
+  })
   bot.on('respawn', () => {
     log('INFO', 'respawned')
     updateFollowGoal()
   })
   bot.on('kicked', (reason) => log('WARN', `kicked: ${JSON.stringify(reason)}`))
   bot.on('end', (reason) => {
+    cancelTask()
     log('INFO', `disconnected: ${reason}; reconnecting in ${reconnectDelay / 1000}s`)
     spawned = false
     setTimeout(connect, reconnectDelay)

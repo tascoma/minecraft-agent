@@ -7,6 +7,7 @@ from pathlib import Path
 from pydantic import BaseModel, TypeAdapter
 
 from app.core.config import get_settings
+from app.schema.chat import ProtectedSpot
 
 
 class Place(BaseModel):
@@ -56,6 +57,11 @@ class PlaceStore:
         tmp = self.path.with_suffix('.tmp')
         tmp.write_text(json.dumps({k: p.model_dump() for k, p in places.items()}, indent=2))
         tmp.replace(self.path)
+
+
+def protected_spots(store: PlaceStore) -> list[ProtectedSpot]:
+    """Every saved place, as the zones the bot keeps clear of digging and building."""
+    return [ProtectedSpot(x=p.x, y=p.y, z=p.z, dimension=p.dimension) for p in store.all()]
 
 
 @lru_cache

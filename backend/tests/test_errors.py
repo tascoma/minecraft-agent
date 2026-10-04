@@ -51,7 +51,10 @@ def test_chat_rejects_malformed_request_with_message():
     assert 'out of sync' in res.json()['error']
 
 
-FOLLOW = {'type': 'follow', 'username': 'Steve', 'x': None, 'y': None, 'z': None, 'label': None}
+FOLLOW = {
+    'type': 'follow', 'username': 'Steve', 'x': None, 'y': None, 'z': None, 'label': None,
+    'item': None, 'count': None,
+}
 
 
 def test_reply_written_next_to_tool_call_is_used():
@@ -69,7 +72,8 @@ def test_reply_written_next_to_tool_call_is_used():
     with agent.override(model=FunctionModel(respond)):
         res = client.post('/chat', json={'username': 'Steve', 'message': 'follow me'})
     assert res.status_code == 200
-    assert res.json() == {'reply': "I'm on my way!", 'actions': [FOLLOW]}
+    assert res.json()['reply'] == "I'm on my way!"
+    assert res.json()['actions'] == [FOLLOW]
 
 
 def test_actions_survive_when_model_never_writes_text():
@@ -84,7 +88,8 @@ def test_actions_survive_when_model_never_writes_text():
     with agent.override(model=FunctionModel(respond)):
         res = client.post('/chat', json={'username': 'Steve', 'message': 'follow me'})
     assert res.status_code == 200
-    assert res.json() == {'reply': 'On it!', 'actions': [FOLLOW]}
+    assert res.json()['reply'] == 'On it!'
+    assert res.json()['actions'] == [FOLLOW]
 
 
 def test_empty_reply_without_actions_is_still_an_error():

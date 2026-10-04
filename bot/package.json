@@ -5,12 +5,16 @@
   "type": "module",
   "scripts": {
     "start": "node --env-file-if-exists=../.env index.js",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "test": "node --test",
+    "check:survival": "node --env-file-if-exists=../.env scripts/check-survival.js",
+    "check:gathering": "node --env-file-if-exists=../.env scripts/check-gathering.js"
   },
   "dependencies": {
     "mineflayer": "^4.39.0",
     "mineflayer-armor-manager": "^2.0.1",
     "mineflayer-auto-eat": "^5.0.3",
+    "mineflayer-collectblock": "^1.6.0",
     "mineflayer-pathfinder": "^2.4.5"
   },
   "devDependencies": {

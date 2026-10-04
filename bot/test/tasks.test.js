@@ -1,0 +1,52 @@
+import assert from 'node:assert/strict'
+import { afterEach, describe, it } from 'node:test'
+import { cancelTask, currentTask, startTask } from '../tasks.js'
+
+const log = () => {}
+const tick = () => new Promise((r) => setTimeout(r, 0))
+
+describe('tasks', () => {
+  afterEach(() => cancelTask())
+
+  it('reports the current job and its progress, then clears it', async () => {
+    let finish
+    const ended = []
+    startTask('getting 3 logs', (task) => new Promise((r) => { task.progress = '1/3'; finish = r }), { log, onEnd: (t) => ended.push(t.description) })
+    await tick()
+    assert.deepEqual(currentTask(), { description: 'getting 3 logs', progress: '1/3' })
+    finish()
+    await tick()
+    assert.equal(currentTask(), null)
+    assert.deepEqual(ended, ['getting 3 logs'])
+  })
+
+  it('a new job cancels the old one, which must not run onEnd', async () => {
+    const ended = []
+    const cancelled = []
+    const forever = () => new Promise(() => {})
+    startTask('first', forever, { log, onCancel: () => cancelled.push('first'), onEnd: () => ended.push('first') })
+    startTask('second', forever, { log, onEnd: () => ended.push('second') })
+    await tick()
+    assert.deepEqual(cancelled, ['first'])
+    assert.equal(currentTask().description, 'second')
+    assert.deepEqual(ended, [])
+  })
+
+  it('cancelTask stops the job and marks it cancelled', async () => {
+    let seen
+    startTask('job', (task) => { seen = task; return new Promise(() => {}) }, { log })
+    await tick()
+    cancelTask()
+    assert.ok(seen.cancelled)
+    assert.equal(currentTask(), null)
+  })
+
+  it('a job that throws still clears and runs onEnd', async () => {
+    const ended = []
+    startTask('broken', () => { throw new Error('boom') }, { log, onEnd: () => ended.push('broken') })
+    await tick()
+    await tick()
+    assert.equal(currentTask(), null)
+    assert.deepEqual(ended, ['broken'])
+  })
+})

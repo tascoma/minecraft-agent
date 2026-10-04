@@ -7,8 +7,10 @@ from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
 
 from app.agents.agent import ChatDeps, agent
-from app.schema.chat import BotAction, ChatRequest, ChatResponse
+from app.schema.chat import BotAction, ChatRequest, ChatResponse, ProtectedSpot
 from app.services import world
+from app.services.memory import memory
+from app.services.places import get_place_store, protected_spots
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -47,6 +49,12 @@ def log_messages(messages: list[ModelMessage], *, failed: bool = False) -> None:
             logger.info('model returned an empty response')
 
 
+@router.get('/places')
+async def places() -> list[ProtectedSpot]:
+    """Saved places, fetched by the bot when it joins so its no-digging zones are right from the start."""
+    return protected_spots(get_place_store())
+
+
 @router.post('/chat')
 async def chat(request: ChatRequest) -> ChatResponse:
     logger.info('chat from %s: %s', request.username, request.message)
@@ -54,9 +62,10 @@ async def chat(request: ChatRequest) -> ChatResponse:
         logger.info(world.describe_status(request.state))
     started = time.perf_counter()
     deps = ChatDeps(username=request.username, state=request.state)
+    prompt = f'{request.username}: {request.message}'
     with capture_run_messages() as messages:
         try:
-            result = await agent.run(f'{request.username}: {request.message}', deps=deps)
+            result = await agent.run(prompt, deps=deps, message_history=memory.history(request.username))
         except UnexpectedModelBehavior:
             log_messages(messages, failed=True)
             # The tools already did their job (e.g. queued "follow"); don't throw that away
@@ -64,7 +73,10 @@ async def chat(request: ChatRequest) -> ChatResponse:
             if deps.actions:
                 reply = last_text(messages) or FALLBACK_REPLY
                 logger.warning('agent ended without a reply; sending its actions with: %s', reply)
-                return ChatResponse(reply=reply, actions=unique_actions(deps.actions))
+                memory.remember_fallback(request.username, messages, reply)
+                return ChatResponse(
+                    reply=reply, actions=unique_actions(deps.actions), protected_places=protected_spots(deps.places)
+                )
             logger.exception('agent run failed for message from %s', request.username)
             raise
         except Exception:
@@ -73,6 +85,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             raise
 
     log_messages(result.new_messages())
+    memory.remember(request.username, result.new_messages())
     usage = result.usage
     logger.info(
         'reply to %s (%.1fs, %d in / %d out tokens): %s',
@@ -82,4 +95,6 @@ async def chat(request: ChatRequest) -> ChatResponse:
         usage.output_tokens,
         result.output,
     )
-    return ChatResponse(reply=result.output, actions=unique_actions(deps.actions))
+    return ChatResponse(
+        reply=result.output, actions=unique_actions(deps.actions), protected_places=protected_spots(deps.places)
+    )

@@ -88,6 +88,29 @@ def recover_items(ctx: RunContext[ChatDeps]) -> str:
 
 
 @agent.tool
+def collect(ctx: RunContext[ChatDeps], item: str, count: int) -> str:
+    """Gather an item by breaking the blocks that drop it, e.g. "log" (any tree), "oak_log", "cobblestone",
+    "dirt", "sand", "gravel", "coal", "raw_iron". Count is 1 to 64.
+
+    Stone and coal need a pickaxe in your inventory; iron needs a stone pickaxe or better. You dig only
+    while gathering, never near saved places, and never through blocks a player placed. It takes a while
+    and replaces whatever you were doing; the bot reports progress and the result in chat.
+    """
+    ctx.deps.actions.append(BotAction(type='collect', item=item, count=count))
+    return f'Started gathering {count} {item}. The bot will report how it goes, so do not claim it is done.'
+
+
+@agent.tool
+def give_items(ctx: RunContext[ChatDeps], item: str, count: int | None = None) -> str:
+    """Walk to the player who is talking to you and toss them an item from your inventory.
+
+    Leave count out to give all of it. Check your inventory first if you're not sure you have it.
+    """
+    ctx.deps.actions.append(BotAction(type='give', username=ctx.deps.username, item=item, count=count))
+    return f'Bringing {ctx.deps.username} the {item}. The bot will say what it handed over.'
+
+
+@agent.tool
 def go_to(ctx: RunContext[ChatDeps], x: int, z: int, y: int | None = None) -> str:
     """Walk to coordinates and wait there. Leave y out if the player only gave x and z."""
     ctx.deps.actions.append(BotAction(type='goto', x=x, y=y, z=z))
