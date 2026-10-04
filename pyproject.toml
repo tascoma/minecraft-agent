@@ -10,3 +10,8 @@ dependencies = [
     "pydantic-ai-slim[anthropic]>=2.54.0",
     "pydantic-settings>=2.15.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

@@ -87,7 +87,7 @@ def stay_here(ctx: RunContext[ChatDeps]) -> str:
 In this project, tools come in two kinds:
 
 - **Action tools** change the world. They don't touch Minecraft directly, because the backend can't. They append a `BotAction` that is sent back to the bot in the `/chat` response, and the bot carries it out. Examples: `follow_player`, `stay_here`.
-- **Query tools** (planned) read the world: inventory, nearby blocks, position. They'll get their data from the state snapshot the bot sends with each request.
+- **Query tools** read the world: `check_inventory`, `look_around`, `nearby_entities`, `where_are_we`. They read the state snapshot the bot sends with each request (formatted by `app/services/world.py`), so they never call back into the bot. Health, food, position, time and weather are also added to the agent's instructions on every run.
 
 A tool should be **one clear action** with a description precise enough for Claude to know when to use it. Tool definitions are sent on every request, so each new tool adds a few tokens per message.
 
@@ -186,13 +186,17 @@ Meanwhile, with no chat at all, the follow reflex keeps running in the bot. That
 
 ```
 bot/
-  index.js                   connection, logging, reflexes, action executor
+  index.js                   connection, reconnect, logging, follow reflex, action executor
+  state.js                   state snapshot sent with each chat
+  alerts.js                  chat warnings: low health, creeper nearby, nightfall
 backend/app/
   main.py                    FastAPI app, sets up logging at startup
   core/config.py             settings from .env (model, API key, ports)
   core/logging.py            writes backend/logs/agent.log
+  core/errors.py             turns failures into chat-friendly error messages
   agents/agent.py            the agent, ChatDeps, and its tools
   routes/chat.py             POST /chat: runs the agent, logs, returns reply + actions
+  services/world.py          turns the bot's state snapshot into text for the agent
   schema/chat.py             ChatRequest, ChatResponse, BotAction
 skills/
   <name>/SKILL.md            playbooks the agent loads on demand
@@ -207,12 +211,18 @@ backend/logs/
 Everything between the two processes goes through `POST /chat`:
 
 ```jsonc
-// request (bot → backend)
-{ "username": "TScoms23", "message": "stay here" }
+// request (bot → backend); state is built by bot/state.js
+{ "username": "TScoms23", "message": "stay here",
+  "state": { "health": 18, "food": 15, "position": {"x": 0, "y": 64, "z": 0},
+             "dimension": "overworld", "time_of_day": 6000, "raining": false, "thundering": false,
+             "held_item": null, "inventory": [...], "nearby_blocks": [...], "nearby_entities": [...],
+             "player_position": {...}, "player_distance": 4.5 } }
 
 // response (backend → bot)
 { "reply": "Got it!", "actions": [{ "type": "stay", "username": null }] }
 ```
+
+When something fails, the backend answers with an error status and `{ "error": "Claude is rate limiting me. Try again in a moment." }`. The message is written for the player (`app/core/errors.py`). The bot says it in chat as `Error: ...` and writes the full details to the logs. The bot reports its own failures the same way: backend unreachable or slow, an action that throws, an unexpected crash. Repeats of the same error are muted for 10 seconds.
 
 When adding an action, change both sides together: add the type to `BotAction` in `schema/chat.py` and handle it in `runAction` in `bot/index.js`. The bot logs a warning for any action type it doesn't know.
 
@@ -225,7 +235,7 @@ When adding an action, change both sides together: add the type to `BotAction` i
 | Must it react within a second, or run constantly? | A **reflex** in `bot/` |
 | Does the player ask for it, or does it need judgment? | A **tool** in the backend, plus an action handler in the bot |
 | Is it a multi-step plan or game knowledge? | A **skill** in `skills/` |
-| Does it need to know the world state? | Add it to the state snapshot the bot sends (planned) |
+| Does it need to know the world state? | Add it to the snapshot in `bot/state.js` and `BotState` in `schema/chat.py` |
 
 Most functionalities need two or three of these. A typical new action:
 
@@ -262,7 +272,7 @@ flowchart LR
 ```
 
 1. **Task queue in the bot.** "Mine 20 cobblestone" takes minutes. Actions become tasks with an id, progress, cancel, and a result. `stop` cancels the current task.
-2. **State snapshot.** Each request includes health, hunger, position, time, inventory and nearby points of interest, so the agent decides with real information instead of guessing.
+2. **State snapshot** ✅. Each request includes health, hunger, position, time, inventory and nearby points of interest, so the agent decides with real information instead of guessing.
 3. **Events endpoint.** The bot calls `POST /events` when something needs a decision (a task finished, it's under attack). Events cost tokens, so the bot handles anything a reflex can, and rate-limits the rest.
 4. **Memory.** Waypoints, chest contents and notes about the player, stored by the backend so they survive restarts.
 5. **Tool groups.** As tools multiply, group them (movement, gathering, crafting, combat) into toolsets or capabilities, so the agent's tool list stays readable and each group can be tested on its own.

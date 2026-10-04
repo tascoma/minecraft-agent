@@ -26,19 +26,19 @@ See [architecture.md](architecture.md) for what **reflex**, **tool**, and **skil
 | "Stay here" / "follow me" on request | Tool | `stay_here`, `follow_player` | ✅ |
 | Survive-first-night advice | Skill | `skills/survive-first-night` | ✅ |
 
-## Phase 1: World awareness
+## Phase 1: World awareness ✅
 
 The agent can't make good decisions without knowing what's going on. Before the bot can do much, every chat request should carry a snapshot of the bot's state.
 
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
-| Send health, hunger, position, dimension, time of day and weather with each chat | Bot → backend | `bot.health`, `bot.food`, `bot.entity.position`, `bot.time` | 🔲 |
-| Report inventory contents | Tool | `bot.inventory.items()` | 🔲 |
-| Describe nearby blocks (ores, trees, water, lava) | Tool | `bot.findBlocks` | 🔲 |
-| Describe nearby entities (mobs, animals, players, dropped items) | Tool | `bot.entities` | 🔲 |
-| Tell the player where it is and how far away | Tool | positions + distance | 🔲 |
-| Notice and report important events ("I'm hurt", "creeper nearby", "it's getting dark") | Reflex → chat | `health`, `entitySpawn`, `time` events | 🔲 |
-| Auto-reconnect when the world closes and comes back | Bot | `end` event + retry | 🔲 |
+| Send health, hunger, position, dimension, time of day and weather with each chat | Bot → backend | `bot.health`, `bot.food`, `bot.entity.position`, `bot.time` | ✅ |
+| Report inventory contents (`check_inventory`) | Tool | `bot.inventory.items()` | ✅ |
+| Describe nearby blocks (ores, trees, water, lava) (`look_around`) | Tool | `bot.findBlocks` | ✅ |
+| Describe nearby entities (mobs, animals, players, dropped items) (`nearby_entities`) | Tool | `bot.entities` | ✅ |
+| Tell the player where it is and how far away (`where_are_we`) | Tool | positions + distance | ✅ |
+| Notice and report important events ("I'm hurt", "creeper nearby", "it's getting dark") | Reflex → chat | `health` and `time` events, 1 s creeper scan | ✅ |
+| Auto-reconnect when the world closes and comes back | Bot | `end` event + retry | ✅ |
 
 ## Phase 2: Movement and navigation
 

@@ -6,6 +6,7 @@ from pydantic_ai.messages import ModelRequest, ModelResponse, ToolCallPart, Tool
 
 from app.agents.agent import ChatDeps, agent
 from app.schema.chat import ChatRequest, ChatResponse
+from app.services import world
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -14,8 +15,10 @@ router = APIRouter()
 @router.post('/chat')
 async def chat(request: ChatRequest) -> ChatResponse:
     logger.info('chat from %s: %s', request.username, request.message)
+    if request.state:
+        logger.info(world.describe_status(request.state))
     started = time.perf_counter()
-    deps = ChatDeps(username=request.username)
+    deps = ChatDeps(username=request.username, state=request.state)
     try:
         result = await agent.run(f'{request.username}: {request.message}', deps=deps)
     except Exception:
@@ -27,7 +30,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             if isinstance(message, ModelResponse) and isinstance(part, ToolCallPart):
                 logger.info('tool call %s(%s)', part.tool_name, part.args_as_json_str())
             elif isinstance(message, ModelRequest) and isinstance(part, ToolReturnPart):
-                logger.info('tool result %s: %.200s', part.tool_name, part.model_response_str())
+                logger.info('tool result %s: %s', part.tool_name, part.model_response_str())
 
     usage = result.usage
     logger.info(

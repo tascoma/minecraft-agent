@@ -40,9 +40,16 @@ cd bot && npm install       # Node deps
    ```
 4. Type in Minecraft chat. The bot replies.
 
+## Test
+
+```sh
+cd backend
+uv run pytest
+```
+
 ## Roadmap
 
 - [x] Chat buddy: joins the world and talks through the agent
 - [ ] Tools: follow player, mine, craft, place blocks, fight (via mineflayer-pathfinder, -collectblock, -pvp)
-- [ ] World awareness: nearby blocks, entities, inventory, time of day passed to the agent
+- [x] World awareness: nearby blocks, entities, inventory, time of day passed to the agent
 - [ ] More skills: shelter building, getting iron gear, farming
