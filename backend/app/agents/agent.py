@@ -29,6 +29,10 @@ agent = Agent(
         provider=AnthropicProvider(api_key=settings.anthropic_api_key.get_secret_value()),
     ),
     deps_type=ChatDeps,
+    # Haiku often writes its reply next to a tool call and then answers the tool result with nothing.
+    # Retrying makes it call the tool again, so don't retry much; the /chat route falls back to that
+    # earlier text instead.
+    retries={'output': 1},
     instructions=(
         'You are a friendly Minecraft companion who plays alongside the user in their world. '
         'Your replies are sent as in-game chat, so keep them short: one or two sentences, plain text, no Markdown. '

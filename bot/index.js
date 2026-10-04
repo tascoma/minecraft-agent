@@ -57,6 +57,32 @@ function reportError(message) {
   if (bot?.entity) say(`Error: ${message}`)
 }
 
+// POST to the backend, retrying once if the connection fails before any response. That happens
+// when a kept-alive connection was closed by the server just as it was reused; the backend never
+// saw the request, so sending it again is safe.
+async function postChat(body) {
+  const request = () =>
+    fetch(`${backendUrl}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(backendTimeoutMs),
+    })
+  try {
+    return await request()
+  } catch (err) {
+    if (err.name === 'TimeoutError') throw err
+    log('WARN', `backend request failed (${describeFetchError(err)}), retrying once`)
+    return await request()
+  }
+}
+
+// fetch hides the real reason (refused, reset, ...) in err.cause.
+function describeFetchError(err) {
+  const cause = err.cause
+  return cause ? `${err.message}: ${cause.code ?? cause.message}` : err.message
+}
+
 // Chat-ready message for a failed backend request.
 async function backendErrorMessage(err, res) {
   if (err.name === 'TimeoutError') return 'my backend took too long to answer. Try again?'
@@ -219,15 +245,10 @@ function connect() {
     log('INFO', `heard ${sender}: ${message}`)
     let res
     try {
-      res = await fetch(`${backendUrl}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: sender, message, state: safeSnapshot(sender) }),
-        signal: AbortSignal.timeout(backendTimeoutMs),
-      })
+      res = await postChat({ username: sender, message, state: safeSnapshot(sender) })
       if (!res.ok) throw new Error(`backend returned HTTP ${res.status}`)
     } catch (err) {
-      log('ERROR', `backend request failed: ${res ? err.message : (err.stack ?? err)}`)
+      log('ERROR', `backend request failed: ${res ? err.message : describeFetchError(err)}`)
       reportError(await backendErrorMessage(err, res))
       return
     }
@@ -252,13 +273,18 @@ function connect() {
 }
 
 // Last resort: keep the bot alive and tell the player, instead of crashing out of the world.
-process.on('uncaughtException', (err) => {
-  log('ERROR', `uncaught: ${err.stack ?? err}`)
-  reportError(`something broke in the bot: ${err.message}`)
-})
-process.on('unhandledRejection', (err) => {
-  log('ERROR', `unhandled rejection: ${err?.stack ?? err}`)
-  reportError(`something broke in the bot: ${err?.message ?? err}`)
-})
+// A bug in a tick handler throws 20 times a second, so log each distinct error at most every errorRepeatMs.
+const lastCrashLogAt = new Map()
+function reportCrash(kind, err) {
+  const message = err?.message ?? String(err)
+  const now = Date.now()
+  if (now - (lastCrashLogAt.get(message) ?? 0) >= errorRepeatMs) {
+    lastCrashLogAt.set(message, now)
+    log('ERROR', `${kind}: ${err?.stack ?? err}`)
+  }
+  reportError(`something broke in the bot: ${message}`)
+}
+process.on('uncaughtException', (err) => reportCrash('uncaught', err))
+process.on('unhandledRejection', (err) => reportCrash('unhandled rejection', err))
 
 connect()

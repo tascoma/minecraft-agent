@@ -49,3 +49,49 @@ def test_chat_rejects_malformed_request_with_message():
     res = client.post('/chat', json={'username': 'Steve'})
     assert res.status_code == 422
     assert 'out of sync' in res.json()['error']
+
+
+FOLLOW = {'type': 'follow', 'username': 'Steve', 'x': None, 'y': None, 'z': None, 'label': None}
+
+
+def test_reply_written_next_to_tool_call_is_used():
+    """What Haiku does: reply text alongside the tool call, then an empty answer to the tool result.
+    Retrying makes it call the tool again, so the bot must get one action and the earlier text."""
+    from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
+
+    def respond(messages, info):
+        last = messages[-1]
+        if isinstance(last, ModelRequest) and any(isinstance(p, ToolReturnPart) for p in last.parts):
+            return ModelResponse(parts=[TextPart('')])
+        return ModelResponse(parts=[TextPart("I'm on my way!"), ToolCallPart('follow_player', {})])
+
+    client = TestClient(app)
+    with agent.override(model=FunctionModel(respond)):
+        res = client.post('/chat', json={'username': 'Steve', 'message': 'follow me'})
+    assert res.status_code == 200
+    assert res.json() == {'reply': "I'm on my way!", 'actions': [FOLLOW]}
+
+
+def test_actions_survive_when_model_never_writes_text():
+    from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
+
+    def respond(messages, info):
+        if len(messages) == 1:
+            return ModelResponse(parts=[ToolCallPart('follow_player', {})])
+        return ModelResponse(parts=[TextPart('')])
+
+    client = TestClient(app)
+    with agent.override(model=FunctionModel(respond)):
+        res = client.post('/chat', json={'username': 'Steve', 'message': 'follow me'})
+    assert res.status_code == 200
+    assert res.json() == {'reply': 'On it!', 'actions': [FOLLOW]}
+
+
+def test_empty_reply_without_actions_is_still_an_error():
+    from pydantic_ai.messages import ModelResponse, TextPart
+
+    client = TestClient(app, raise_server_exceptions=False)
+    with agent.override(model=FunctionModel(lambda messages, info: ModelResponse(parts=[TextPart('')]))):
+        res = client.post('/chat', json={'username': 'Steve', 'message': 'hi'})
+    assert res.status_code == 500
+    assert 'confused' in res.json()['error']

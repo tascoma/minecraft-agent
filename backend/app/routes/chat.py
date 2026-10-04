@@ -2,14 +2,49 @@ import logging
 import time
 
 from fastapi import APIRouter
-from pydantic_ai.messages import ModelRequest, ModelResponse, ToolCallPart, ToolReturnPart
+from pydantic_ai import capture_run_messages
+from pydantic_ai.exceptions import UnexpectedModelBehavior
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
 
 from app.agents.agent import ChatDeps, agent
-from app.schema.chat import ChatRequest, ChatResponse
+from app.schema.chat import BotAction, ChatRequest, ChatResponse
 from app.services import world
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# Said in chat when the agent's tools ran but it never wrote any reply text at all.
+FALLBACK_REPLY = 'On it!'
+
+
+def last_text(messages: list[ModelMessage]) -> str | None:
+    """The last thing the model wrote, even if it came alongside a tool call rather than as the final answer."""
+    for message in reversed(messages):
+        if isinstance(message, ModelResponse):
+            for part in reversed(message.parts):
+                if isinstance(part, TextPart) and part.content.strip():
+                    return part.content.strip()
+    return None
+
+
+def unique_actions(actions: list[BotAction]) -> list[BotAction]:
+    """Drop back-to-back repeats: when the model retries it often calls the same tool again.
+    Non-adjacent repeats stay, so "follow, stay, follow" still ends with following."""
+    return [a for i, a in enumerate(actions) if i == 0 or a != actions[i - 1]]
+
+
+def log_messages(messages: list[ModelMessage], *, failed: bool = False) -> None:
+    for message in messages:
+        for part in message.parts:
+            if isinstance(message, ModelResponse) and isinstance(part, ToolCallPart):
+                logger.info('tool call %s(%s)', part.tool_name, part.args_as_json_str())
+            elif isinstance(message, ModelRequest) and isinstance(part, ToolReturnPart):
+                logger.info('tool result %s: %s', part.tool_name, part.model_response_str())
+            elif failed and isinstance(part, TextPart):
+                logger.info('model text: %r', part.content)
+        # A failed run is often the model answering with nothing at all; make that visible.
+        if failed and isinstance(message, ModelResponse) and not any(p.has_content() for p in message.parts):
+            logger.info('model returned an empty response')
 
 
 @router.post('/chat')
@@ -19,19 +54,25 @@ async def chat(request: ChatRequest) -> ChatResponse:
         logger.info(world.describe_status(request.state))
     started = time.perf_counter()
     deps = ChatDeps(username=request.username, state=request.state)
-    try:
-        result = await agent.run(f'{request.username}: {request.message}', deps=deps)
-    except Exception:
-        logger.exception('agent run failed for message from %s', request.username)
-        raise
+    with capture_run_messages() as messages:
+        try:
+            result = await agent.run(f'{request.username}: {request.message}', deps=deps)
+        except UnexpectedModelBehavior:
+            log_messages(messages, failed=True)
+            # The tools already did their job (e.g. queued "follow"); don't throw that away
+            # just because the model ended with an empty message. Use what it said earlier.
+            if deps.actions:
+                reply = last_text(messages) or FALLBACK_REPLY
+                logger.warning('agent ended without a reply; sending its actions with: %s', reply)
+                return ChatResponse(reply=reply, actions=unique_actions(deps.actions))
+            logger.exception('agent run failed for message from %s', request.username)
+            raise
+        except Exception:
+            log_messages(messages, failed=True)
+            logger.exception('agent run failed for message from %s', request.username)
+            raise
 
-    for message in result.new_messages():
-        for part in message.parts:
-            if isinstance(message, ModelResponse) and isinstance(part, ToolCallPart):
-                logger.info('tool call %s(%s)', part.tool_name, part.args_as_json_str())
-            elif isinstance(message, ModelRequest) and isinstance(part, ToolReturnPart):
-                logger.info('tool result %s: %s', part.tool_name, part.model_response_str())
-
+    log_messages(result.new_messages())
     usage = result.usage
     logger.info(
         'reply to %s (%.1fs, %d in / %d out tokens): %s',
@@ -41,4 +82,4 @@ async def chat(request: ChatRequest) -> ChatResponse:
         usage.output_tokens,
         result.output,
     )
-    return ChatResponse(reply=result.output, actions=deps.actions)
+    return ChatResponse(reply=result.output, actions=unique_actions(deps.actions))
