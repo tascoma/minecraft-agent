@@ -4,7 +4,7 @@ import time
 from fastapi import APIRouter
 from pydantic_ai.messages import ModelRequest, ModelResponse, ToolCallPart, ToolReturnPart
 
-from app.agents.agent import agent
+from app.agents.agent import ChatDeps, agent
 from app.schema.chat import ChatRequest, ChatResponse
 
 logger = logging.getLogger(__name__)
@@ -15,8 +15,9 @@ router = APIRouter()
 async def chat(request: ChatRequest) -> ChatResponse:
     logger.info('chat from %s: %s', request.username, request.message)
     started = time.perf_counter()
+    deps = ChatDeps(username=request.username)
     try:
-        result = await agent.run(f'{request.username}: {request.message}')
+        result = await agent.run(f'{request.username}: {request.message}', deps=deps)
     except Exception:
         logger.exception('agent run failed for message from %s', request.username)
         raise
@@ -37,4 +38,4 @@ async def chat(request: ChatRequest) -> ChatResponse:
         usage.output_tokens,
         result.output,
     )
-    return ChatResponse(reply=result.output)
+    return ChatResponse(reply=result.output, actions=deps.actions)
