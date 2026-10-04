@@ -107,3 +107,10 @@ def test_fallback_exchange_keeps_its_tool_call():
     history = calls[-1]
     assert any(isinstance(p, ToolCallPart) and p.tool_name == 'follow_player' for m in history for p in m.parts)
     assert texts(history)[-2:] == ["I'm on my way!", 'Steve: thanks']
+
+
+def test_history_is_separate_per_world():
+    m = ConversationMemory()
+    m.remember('Steve', exchange('Steve: find coal', 'Get it?'), 'seed-a')
+    assert m.history('Steve', 'seed-b') == []
+    assert texts(m.history('Steve', 'seed-a')) == ['Steve: find coal', 'Get it?']

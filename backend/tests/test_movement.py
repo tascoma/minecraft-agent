@@ -125,3 +125,17 @@ def test_make_action(store):
         BotAction(type='make', item='stone_pickaxe', count=1),
         BotAction(type='make', item='torch', count=8),
     ]
+
+
+def test_places_are_kept_per_world(tmp_path, monkeypatch):
+    from app.services import places
+
+    monkeypatch.setattr(places, 'get_settings', lambda: SimpleNamespace(data_dir=tmp_path))
+    places.get_place_store.cache_clear()
+    places.get_place_store('seed-a').save(Place(name='home', x=1, y=64, z=1, dimension='overworld'))
+    assert places.get_place_store('seed-b').all() == []
+    assert [p.name for p in places.get_place_store('seed-a').all()] == ['home']
+    # Ids with odd characters get a safe folder, and different ids never share one.
+    assert places.world_dir_name('localhost:25565') != places.world_dir_name('localhost/25565')
+    assert '/' not in places.world_dir_name('../x/y')
+    places.get_place_store.cache_clear()

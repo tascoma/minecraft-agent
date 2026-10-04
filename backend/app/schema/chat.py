@@ -56,6 +56,8 @@ class BotState(BaseModel):
     food: int
     position: Position
     dimension: str
+    # Which world this is (the world's seed hash, or the MC_WORLD name), so saved data stays per world.
+    world_id: str | None = None
     # Ticks since sunrise, 0 to 23999. Night runs from about 13000 to 23000.
     time_of_day: int
     raining: bool

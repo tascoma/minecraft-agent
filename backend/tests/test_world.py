@@ -96,3 +96,8 @@ def test_tools_in_status():
         {'name': 'wooden_axe', 'count': 1},
     ])
     assert 'tools: stone_pickaxe, wooden_axe.' in world.describe_status(state)
+
+
+def test_status_names_the_world():
+    assert 'World seed-ab12.' in world.describe_status(make_state(world_id='seed-ab12'))
+    assert 'World' not in world.describe_status(make_state())

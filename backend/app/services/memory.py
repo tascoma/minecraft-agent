@@ -1,6 +1,6 @@
 """Short-term conversation memory, so a follow-up like "get it" makes sense.
 
-Keeps each player's last few exchanges (their message, any tool calls, and the bot's reply), in memory
+Keeps each player's last few exchanges in each world (their message, any tool calls, and the bot's reply), in memory
 only. Tool calls must stay in: with replies alone, the model learns that saying "On my way to get logs!"
 is enough and stops calling the tools.
 """
@@ -35,6 +35,11 @@ def compact(messages: list[ModelMessage]) -> list[ModelMessage]:
     return kept
 
 
+def conversation_key(username: str, world_id: str | None) -> str:
+    """A player's talk in one world is separate from their talk in another."""
+    return f'{world_id}/{username}' if world_id else username
+
+
 @dataclass
 class Conversation:
     exchanges: list[list[ModelMessage]] = field(default_factory=list)
@@ -46,23 +51,26 @@ class ConversationMemory:
         self._clock = clock
         self._conversations: dict[str, Conversation] = {}
 
-    def history(self, username: str) -> list[ModelMessage]:
+    def history(self, username: str, world_id: str | None = None) -> list[ModelMessage]:
         """The recent exchanges with this player, as message history for the agent."""
-        conversation = self._conversations.get(username)
+        key = conversation_key(username, world_id)
+        conversation = self._conversations.get(key)
         if not conversation or self._clock() - conversation.last_active > IDLE_SECONDS:
-            self._conversations.pop(username, None)
+            self._conversations.pop(key, None)
             return []
         return [message for exchange in conversation.exchanges for message in exchange]
 
-    def remember(self, username: str, messages: list[ModelMessage]) -> None:
+    def remember(self, username: str, messages: list[ModelMessage], world_id: str | None = None) -> None:
         """Keep one exchange: the messages of a single agent run."""
-        conversation = self._conversations.setdefault(username, Conversation())
+        conversation = self._conversations.setdefault(conversation_key(username, world_id), Conversation())
         if self._clock() - conversation.last_active > IDLE_SECONDS:
             conversation.exchanges.clear()
         conversation.exchanges = [*conversation.exchanges, compact(messages)][-MAX_EXCHANGES:]
         conversation.last_active = self._clock()
 
-    def remember_fallback(self, username: str, messages: list[ModelMessage], reply: str) -> None:
+    def remember_fallback(
+        self, username: str, messages: list[ModelMessage], reply: str, world_id: str | None = None
+    ) -> None:
         """Keep a run that ended without a reply (the route sent `reply` instead): the message and the
         first round of tool calls and results, then that reply. Drops the empty answers and retries."""
         kept = messages[:1]
@@ -70,7 +78,7 @@ class ConversationMemory:
             if isinstance(message, ModelRequest) and any(isinstance(p, ToolReturnPart) for p in message.parts):
                 kept = messages[: i + 1]
                 break
-        self.remember(username, [*kept, ModelResponse(parts=[TextPart(content=reply)])])
+        self.remember(username, [*kept, ModelResponse(parts=[TextPart(content=reply)])], world_id)
 
 
 memory = ConversationMemory()

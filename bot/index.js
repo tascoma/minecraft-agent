@@ -9,12 +9,15 @@ import { CompanionMovements, setProtectedSpots } from './movements.js'
 import { snapshot } from './state.js'
 import { installSurvival } from './survival.js'
 import { cancelTask, currentTask } from './tasks.js'
+import { currentWorldId, setWorldFromLogin } from './world.js'
 
 const { pathfinder, goals } = pathfinderPkg
 
 const host = process.env.MC_HOST ?? 'localhost'
 const port = Number(process.env.MC_PORT ?? 25565)
 const username = process.env.MC_USERNAME ?? 'Claude'
+// Names the world instead of using its seed hash (e.g. when two worlds share a seed).
+const worldOverride = process.env.MC_WORLD
 const backendUrl = process.env.BACKEND_URL ?? 'http://127.0.0.1:8000'
 // How close the bot tries to stay to the player it follows, in blocks.
 const followRange = 3
@@ -87,11 +90,13 @@ function describeFetchError(err) {
   return cause ? `${err.message}: ${cause.code ?? cause.message}` : err.message
 }
 
+const worldQuery = () => (currentWorldId() ? `?world=${encodeURIComponent(currentWorldId())}` : '')
+
 // Load the saved places so the no-digging zones are right before anyone chats. Chat replies keep
 // them up to date after that.
 async function loadProtectedSpots() {
   try {
-    const res = await fetch(`${backendUrl}/places`, { signal: AbortSignal.timeout(5000) })
+    const res = await fetch(`${backendUrl}/places${worldQuery()}`, { signal: AbortSignal.timeout(5000) })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const spots = await res.json()
     setProtectedSpots(spots)
@@ -254,6 +259,9 @@ function connect() {
   log('INFO', `connecting to ${host}:${port} as ${username}`)
   bot = mineflayer.createBot({ host, port, username, auth: 'offline' })
   bot.loadPlugin(pathfinder)
+  bot._client.on('login', (packet) => {
+    log('INFO', `world: ${setWorldFromLogin(packet, { override: worldOverride, host, port })}`)
+  })
 
   bot.once('spawn', () => {
     log('INFO', `joined ${host}:${port} as ${username}`)

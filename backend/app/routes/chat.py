@@ -50,9 +50,9 @@ def log_messages(messages: list[ModelMessage], *, failed: bool = False) -> None:
 
 
 @router.get('/places')
-async def places() -> list[ProtectedSpot]:
-    """Saved places, fetched by the bot when it joins so its no-digging zones are right from the start."""
-    return protected_spots(get_place_store())
+async def places(world: str | None = None) -> list[ProtectedSpot]:
+    """Saved places of one world, fetched by the bot when it joins so its no-digging zones are right from the start."""
+    return protected_spots(get_place_store(world or None))
 
 
 @router.post('/chat')
@@ -61,11 +61,12 @@ async def chat(request: ChatRequest) -> ChatResponse:
     if request.state:
         logger.info(world.describe_status(request.state))
     started = time.perf_counter()
+    world_id = request.state.world_id if request.state else None
     deps = ChatDeps(username=request.username, state=request.state)
     prompt = f'{request.username}: {request.message}'
     with capture_run_messages() as messages:
         try:
-            result = await agent.run(prompt, deps=deps, message_history=memory.history(request.username))
+            result = await agent.run(prompt, deps=deps, message_history=memory.history(request.username, world_id))
         except UnexpectedModelBehavior:
             log_messages(messages, failed=True)
             # The tools already did their job (e.g. queued "follow"); don't throw that away
@@ -73,7 +74,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             if deps.actions:
                 reply = last_text(messages) or FALLBACK_REPLY
                 logger.warning('agent ended without a reply; sending its actions with: %s', reply)
-                memory.remember_fallback(request.username, messages, reply)
+                memory.remember_fallback(request.username, messages, reply, world_id)
                 return ChatResponse(
                     reply=reply, actions=unique_actions(deps.actions), protected_places=protected_spots(deps.places)
                 )
@@ -85,7 +86,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             raise
 
     log_messages(result.new_messages())
-    memory.remember(request.username, result.new_messages())
+    memory.remember(request.username, result.new_messages(), world_id)
     usage = result.usage
     logger.info(
         'reply to %s (%.1fs, %d in / %d out tokens): %s',

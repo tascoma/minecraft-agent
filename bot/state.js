@@ -1,6 +1,7 @@
 // Builds the snapshot of the bot's situation that is sent to the backend with every chat.
 import { lastDeathInfo } from './survival.js'
 import { currentTask } from './tasks.js'
+import { currentWorldId } from './world.js'
 
 // How far the bot looks for blocks and entities, in blocks.
 const scanRadius = 32
@@ -76,6 +77,7 @@ export function snapshot(bot, speaker) {
     food: bot.food,
     position: point(me),
     dimension: bot.game.dimension,
+    world_id: currentWorldId(),
     time_of_day: bot.time.timeOfDay,
     raining: bot.isRaining,
     thundering: bot.thunderState > 0,

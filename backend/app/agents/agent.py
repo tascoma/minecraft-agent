@@ -20,7 +20,12 @@ class ChatDeps:
     # None when the bot didn't send its state (e.g. an older bot or a test request).
     state: BotState | None = None
     actions: list[BotAction] = field(default_factory=list)
-    places: PlaceStore = field(default_factory=get_place_store)
+    # The saved places of the world the bot is in; picked from the state's world id unless given.
+    places: PlaceStore = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.places is None:
+            self.places = get_place_store(self.state.world_id if self.state else None)
 
 
 agent = Agent(

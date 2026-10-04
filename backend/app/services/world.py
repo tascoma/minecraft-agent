@@ -82,8 +82,9 @@ def describe_tools(state: BotState) -> str:
 def describe_status(state: BotState) -> str:
     """One line with the essentials, added to the agent's instructions on every run."""
     held = state.held_item or 'nothing'
+    world = f'World {state.world_id}. ' if state.world_id else ''
     status = (
-        f'Your status: health {state.health:g}/20 ({describe_health(state.health)}), '
+        f'{world}Your status: health {state.health:g}/20 ({describe_health(state.health)}), '
         f'food {state.food}/20 ({describe_food(state.food)}), '
         f'at {format_position(state.position)} in {describe_dimension(state.dimension)}, '
         f'{describe_time(state.time_of_day)}, {describe_weather(state)}, holding {held}, '
