@@ -240,8 +240,16 @@ function connect() {
     if (!companion && player.username !== bot.username) follow(player.username)
   })
 
-  bot.on('chat', async (sender, message) => {
-    if (sender === bot.username) return
+  // Only real player chat. Mineflayer's 'chat' event also matches server lines like
+  // "[Steve: Gave 16 [Bread] to Claude]" that every op sees when someone runs a command,
+  // and each of those would cost an agent run.
+  bot._client.on('playerChat', ({ sender: uuid, plainMessage }) => {
+    const sender = Object.values(bot.players).find((p) => p.uuid === uuid)?.username
+    if (!sender || sender === bot.username || !plainMessage) return
+    handleChat(sender, plainMessage)
+  })
+
+  async function handleChat(sender, message) {
     log('INFO', `heard ${sender}: ${message}`)
     let res
     try {
@@ -255,7 +263,7 @@ function connect() {
     const { reply, actions = [] } = await res.json()
     say(reply)
     actions.forEach(runAction)
-  })
+  }
 
   bot.on('death', () => log('WARN', 'died'))
   bot.on('respawn', () => {
