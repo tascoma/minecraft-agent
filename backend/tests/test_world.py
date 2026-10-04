@@ -75,3 +75,10 @@ def test_location_with_and_without_player():
         'You are at (10, 64, -3) in the Overworld. Steve is at (20, 64, -3), 10 blocks from you.'
     )
     assert 'out of sight' in world.describe_location(make_state(), 'Steve')
+
+
+def test_recent_death_in_status():
+    state = make_state(last_death={'position': {'x': 5, 'y': 40, 'z': 9}, 'dimension': 'overworld', 'seconds_ago': 70})
+    assert world.describe_status(state).endswith(
+        'You died 1 min ago at (5, 40, 9) in the Overworld; your dropped items vanish in about 3 min.'
+    )

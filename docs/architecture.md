@@ -14,7 +14,7 @@ flowchart TB
 
     subgraph BOT["bot/ (Node + Mineflayer) on the Mac"]
         conn["Connection<br/>joins as a player, hears chat"]
-        reflex["Reflexes<br/>follow you (later: eat, fight back)"]
+        reflex["Reflexes<br/>follow, eat, armor, back off,<br/>sleep (later: fight back)"]
         exec["Action executor<br/>runs actions from the agent"]
     end
 
@@ -111,6 +111,11 @@ A **reflex** is behavior that runs in the bot on its own: no backend call, no Cl
 
 Following the player is a reflex: `mineflayer-pathfinder` keeps the bot within 3 blocks of you every tick. The agent only switches it on or off.
 
+The survival reflexes in `bot/survival.js` are the same kind of thing: eating, putting on armor, backing off from mobs when hurt, getting out of lava, fire and deep water, and sleeping when you sleep. Two rules keep them from fighting with what you asked for:
+
+- **Your command wins.** Any action from the agent cancels a running reflex (`survival.cancel()`).
+- **A reflex finishes the job, then hands back.** While one is driving, the follow logic stays out of the way (`survival.busy()`); when it's done, the bot goes back to following or standing still (`resume()`).
+
 Use a reflex when the behavior is:
 
 - **Time-critical**: dodging a creeper can't wait 2 seconds for a model reply.
@@ -125,6 +130,7 @@ A **functionality** is something the player experiences, such as "the bot follow
 |---|---|---|---|
 | Follows me around | Pathfinder keeps 3 blocks away | `follow_player`, `stay_here` toggle it | — |
 | Survives the first night *(today: advice only)* | — | — | `survive-first-night` |
+| Stays alive while playing | Eat, wear armor, back off when hurt, sleep when you sleep | `recover_items` after dying | — |
 | Gets me 10 logs *(planned)* | Auto-equip axe | `collect_block("oak_log", 10)` | — |
 | Gets a full set of iron gear *(planned)* | Eat, fight back, pick up drops | `mine_block`, `craft_item`, `smelt` | `iron-gear` |
 
@@ -180,6 +186,8 @@ sequenceDiagram
 
 Meanwhile, with no chat at all, the follow reflex keeps running in the bot. That's why following costs nothing.
 
+The bot only reacts to **real player chat** (the `playerChat` packet, with the sender's UUID and the plain message). It ignores server messages, including the `[Steve: Gave 16 [Bread] to Claude]` lines every operator sees when someone runs a command. Mineflayer's own `chat` event matches those too, which would turn every command into a paid agent run.
+
 ---
 
 ## 4. Where code lives
@@ -190,6 +198,7 @@ bot/
   state.js                   state snapshot sent with each chat
   alerts.js                  chat warnings: low health, creeper nearby, nightfall
   movements.js               pathfinder rules: no digging, safe drops, doors and gates
+  survival.js                reflexes: eat, armor, back off when hurt, escape lava/fire/water, sleep, item recovery
   patches/                   fixes to npm packages, applied by patch-package on npm install
 backend/app/
   main.py                    FastAPI app, sets up logging at startup
@@ -220,10 +229,12 @@ Everything between the two processes goes through `POST /chat`:
   "state": { "health": 18, "food": 15, "position": {"x": 0, "y": 64, "z": 0},
              "dimension": "overworld", "time_of_day": 6000, "raining": false, "thundering": false,
              "held_item": null, "inventory": [...], "nearby_blocks": [...], "nearby_entities": [...],
-             "player_position": {...}, "player_distance": 4.5 } }
+             "player_position": {...}, "player_distance": 4.5,
+             "last_death": null } }  // or {position, dimension, seconds_ago} for 5 minutes after dying
 
 // response (backend → bot)
 { "reply": "Got it!", "actions": [{ "type": "stay", "username": null }] }
+// action types: follow, stay, come, goto (x, y?, z, label?), teleport, recover
 ```
 
 When something fails, the backend answers with an error status and `{ "error": "Claude is rate limiting me. Try again in a moment." }`. The message is written for the player (`app/core/errors.py`). The bot says it in chat as `Error: ...` and writes the full details to the logs. The bot reports its own failures the same way: backend unreachable or slow, an action that throws, an unexpected crash. Repeats of the same error are muted for 10 seconds.
@@ -278,7 +289,7 @@ flowchart LR
 1. **Task queue in the bot.** "Mine 20 cobblestone" takes minutes. Actions become tasks with an id, progress, cancel, and a result. `stop` cancels the current task.
 2. **State snapshot** ✅. Each request includes health, hunger, position, time, inventory and nearby points of interest, so the agent decides with real information instead of guessing.
 3. **Events endpoint.** The bot calls `POST /events` when something needs a decision (a task finished, it's under attack). Events cost tokens, so the bot handles anything a reflex can, and rate-limits the rest.
-4. **Memory.** Named places are done (`services/places.py`). Still to come: chest contents and notes about the player, stored by the backend so they survive restarts.
+4. **Memory.** Named places are done (`services/places.py`); the bot also remembers where it last died, in memory only. Still to come: chest contents and notes about the player, stored by the backend so they survive restarts.
 5. **Tool groups.** As tools multiply, group them (movement, gathering, crafting, combat) into toolsets or capabilities, so the agent's tool list stays readable and each group can be tested on its own.
 
 ---

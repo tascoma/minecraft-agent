@@ -16,21 +16,27 @@ The words this project uses for its own building blocks.
 
 **Action executor**: The part of `bot/index.js` (`runAction`) that takes actions from the backend and performs them with Mineflayer. Logs a warning for any action type it doesn't recognize.
 
-**Action tool**: A tool that changes the world (`follow_player`, `stay_here`). It doesn't touch Minecraft itself; it adds a `BotAction` for the bot to carry out. Compare *query tool*.
+**Action tool**: A tool that changes the world (`follow_player`, `stay_here`, `come_here`, `go_to`, `go_to_place`, `teleport_to_player`, `recover_items`). It doesn't touch Minecraft itself; it adds a `BotAction` for the bot to carry out. Compare *query tool*.
 
 **Backend**: The Python process in `backend/`. The bot's "brain": it receives chat, runs the agent, and replies. It's the only part that costs tokens.
 
 **Bot**: The Node process in `bot/`. The bot's "body": a Minecraft player controlled by code, using Mineflayer. It moves, senses and acts, and never costs tokens. Also refers to the in-game player itself, named **Claude**.
 
-**BotAction**: The data shape of an action, defined in `backend/app/schema/chat.py`: a `type` (`follow` or `stay`) and an optional `username`.
+**BotAction**: The data shape of an action, defined in `backend/app/schema/chat.py`: a `type` (`follow`, `stay`, `come`, `goto`, `teleport` or `recover`), plus `username` for actions aimed at a player and `x`/`y`/`z`/`label` for `goto`.
 
-**ChatDeps**: The per-request deps object for the agent, in `backend/app/agents/agent.py`. Holds who is talking and the list of actions tools have recorded during the run.
+**ChatDeps**: The per-request deps object for the agent, in `backend/app/agents/agent.py`. Holds who is talking, the bot's state snapshot, the saved places, and the list of actions tools have recorded during the run.
+
+**Companion**: The player the bot plays with: the first one it followed. Players who join later don't pull it away, and survival reflexes run to the companion when the bot is hurt.
 
 **Functionality**: Something the player experiences, like "the bot follows me". Not a code unit: it's built from some combination of reflexes, tools and skills.
 
-**Query tool**: *Planned.* A tool that reads the world (inventory, nearby blocks) instead of changing it. Compare *action tool*.
+**Named place**: A position saved under a name ("home", "the mine") with `save_place`, kept in `backend/data/places.json` so it survives restarts. The agent sees every saved name and its distance on each run. Sometimes called a waypoint.
 
-**Reflex**: Behavior the bot runs by itself, triggered by game events or timers, with no backend call and no tokens. Following the player is a reflex. Used for anything time-critical, frequent, or obvious.
+**Query tool**: A tool that reads the world instead of changing it: `check_inventory`, `look_around`, `nearby_entities`, `where_are_we`. It answers from the state snapshot. Compare *action tool*.
+
+**Reflex**: Behavior the bot runs by itself, triggered by game events or timers, with no backend call and no tokens. Following the player is a reflex, and so are the survival reflexes in `bot/survival.js` (eat, armor, back off, escape lava and water, sleep). Used for anything time-critical, frequent, or obvious. A command from the player cancels a running reflex.
+
+**State snapshot**: The bot's current situation, sent with every chat message: health, food, position, dimension, time, weather, inventory, nearby blocks and entities, where the player is, and where the bot last died. Built by `bot/state.js`, defined as `BotState` in the schema.
 
 **Skill**: A `SKILL.md` playbook under `skills/` describing how to do something multi-step. The agent only sees each skill's name and description until it decides to load one. Skills are knowledge; tools are actions.
 
@@ -96,13 +102,17 @@ The words this project uses for its own building blocks.
 
 **Mineflayer**: The JavaScript library that lets code join Minecraft Java as a player. It handles the connection, world state, chat, inventory, digging, placing and crafting.
 
-**Movements**: The pathfinder settings that decide how the bot may move: whether it can dig (`canDig`, turned off here), sprint, parkour, or place blocks to climb or bridge.
+**Movements**: The pathfinder settings that decide how the bot may move: whether it can dig (`canDig`, turned off here), how far it may drop, how much it avoids water, which doors it can open, and whether it may place blocks to climb or bridge. This project's rules are in `bot/movements.js`.
 
 **Offline mode (auth: 'offline')**: How the bot logs in: with just a username, no Microsoft account. The world it joins must allow offline players.
 
 **Pathfinder (mineflayer-pathfinder)**: The Mineflayer plugin that works out a walkable route and moves the bot along it, including jumping, swimming and climbing.
 
-**Plugin**: An add-on that extends Mineflayer, loaded with `bot.loadPlugin(...)`. Examples: `mineflayer-pathfinder` (in use), and `mineflayer-pvp`, `mineflayer-collectblock` and `mineflayer-auto-eat` (planned).
+**patch-package**: Keeps small fixes to installed npm packages as files in `bot/patches/` and reapplies them on every `npm install`. Used for a door bug in `mineflayer-pathfinder`.
+
+**Player chat**: A chat message typed by a player, which Minecraft sends with the sender's UUID. The bot only answers these, not server or command messages.
+
+**Plugin**: An add-on that extends Mineflayer, loaded with `bot.loadPlugin(...)`. In use: `mineflayer-pathfinder`, `mineflayer-auto-eat`, `mineflayer-armor-manager`. Planned: `mineflayer-pvp`, `mineflayer-collectblock`.
 
 **Spawn**: The moment the bot appears in the world after connecting, or after dying. The bot sets up movement and starts following only after spawn.
 
@@ -137,6 +147,8 @@ The words this project uses for its own building blocks.
 
 ## Minecraft
 
+**Allow Cheats (Allow Commands)**: An option on the Open to LAN screen that lets players in the world use commands like `/tp`. The bot needs it to teleport. It only lasts until the world closes.
+
 **Biome**: A region type (plains, desert, taiga) that determines terrain, plants and mobs.
 
 **Block**: One cube in the world: dirt, stone, ore, log. Identified by name in code (`oak_log`, `iron_ore`).
@@ -149,11 +161,11 @@ The words this project uses for its own building blocks.
 
 **Hostile mob**: A mob that attacks players, such as a zombie, skeleton, spider or creeper. Most spawn in the dark.
 
-**Hunger (food)**: A bar from 0 to 20. When it's high, health regenerates; at zero, the player starts taking damage. Mineflayer exposes it as `bot.food`.
+**Hunger (food)**: A bar from 0 to 20. Health only regenerates at 18 or more; at zero, the player starts taking damage. Mineflayer exposes it as `bot.food`.
 
 **Java Edition**: The PC version of Minecraft. Mineflayer only supports Java; it doesn't work with Bedrock (console, mobile, Microsoft Store).
 
-**LAN / Open to LAN**: Hosting a single-player world for others on the same home network (Esc → Open to LAN). It picks a new random port each time, which then has to go in `MC_PORT`.
+**LAN / Open to LAN**: Hosting a single-player world for others on the same home network (Esc → Open to LAN). You can type a port on that screen; otherwise it picks a random one, which then has to go in `MC_PORT`. On a LAN world every player must sleep for the night to skip, which is why the bot sleeps when you do.
 
 **Mob**: Any creature. Passive mobs (cows, sheep) don't attack; hostile mobs do.
 
@@ -171,16 +183,12 @@ The words this project uses for its own building blocks.
 
 ## Planned concepts
 
-From [architecture.md](architecture.md), section 6. None of these exist yet.
+From [architecture.md](architecture.md), section 6. These aren't built yet, or only partly. (The state snapshot and named places used to be listed here; they're now in *Project concepts*.)
 
 **Event**: A message the bot sends the backend when something needs a decision without the player chatting (a task finished, it's under attack). Each event costs tokens, so events are rate-limited.
 
-**Memory**: Information the backend saves across restarts: waypoints, chest contents, notes about the player.
+**Memory**: Information the backend saves across restarts. Named places exist; chest contents and notes about the player are still planned.
 
 **Protected area**: A region where the bot is never allowed to dig or place blocks, so it can't damage the player's builds.
 
-**State snapshot**: The bot's current situation (health, hunger, position, time, inventory, nearby blocks and mobs), sent with each request so the agent decides with real information.
-
 **Task / task queue**: A long-running action, such as "mine 20 cobblestone", that has an id, progress, a result, and can be cancelled. The task queue in the bot runs them in order.
-
-**Waypoint**: A named saved position, like "home" or "the mine", that the bot can return to.

@@ -78,6 +78,16 @@ def teleport_to_player(ctx: RunContext[ChatDeps]) -> str:
 
 
 @agent.tool
+def recover_items(ctx: RunContext[ChatDeps]) -> str:
+    """Go back to where you last died and pick up your dropped items. Items vanish 5 minutes after death.
+
+    Only when the player asks you to get your things back.
+    """
+    ctx.deps.actions.append(BotAction(type='recover'))
+    return 'Going back for the items. The bot will say in chat how it went.'
+
+
+@agent.tool
 def go_to(ctx: RunContext[ChatDeps], x: int, z: int, y: int | None = None) -> str:
     """Walk to coordinates and wait there. Leave y out if the player only gave x and z."""
     ctx.deps.actions.append(BotAction(type='goto', x=x, y=y, z=z))

@@ -8,6 +8,7 @@ from app.agents.agent import (
     forget_place,
     go_to,
     go_to_place,
+    recover_items,
     save_place,
     saved_places,
     stay_here,
@@ -49,12 +50,14 @@ def test_movement_tools_queue_actions(store):
     go_to(c, x=10, z=-20)
     go_to(c, x=10, z=-20, y=70)
     teleport_to_player(c)
+    recover_items(c)
     assert c.deps.actions == [
         BotAction(type='stay'),
         BotAction(type='come', username='Steve'),
         BotAction(type='goto', x=10, z=-20),
         BotAction(type='goto', x=10, y=70, z=-20),
         BotAction(type='teleport', username='Steve'),
+        BotAction(type='recover'),
     ]
 
 

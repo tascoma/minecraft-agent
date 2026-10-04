@@ -59,23 +59,27 @@ The bot does one thing at a time: follow, stand still, or walk somewhere. When i
 
 ## Phase 3: Staying alive (reflexes)
 
-These run automatically, without being asked and without any tokens.
+These run automatically, without being asked and without any tokens. They live in `bot/survival.js`. Any command from the player cancels a running reflex.
+
+Tested in game with a second player running commands (`/give`, `/damage`, `/summon husk`, `/kill`): eating, armor, backing off, sleeping and item recovery all work. Escaping lava, fire and deep water hasn't been tested in game yet.
 
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
-| Eat when hungry | Reflex | `mineflayer-auto-eat` | 🔲 |
-| Equip the best armor it has | Reflex | `mineflayer-armor-manager` | 🔲 |
-| Use the right tool for each block | Reflex | `mineflayer-tool` | 🔲 |
-| Retreat toward the player when health is low | Reflex | `health` event + pathfinder | 🔲 |
-| Get out of water, fire and lava | Reflex | `entity` state checks | 🔲 |
-| Sleep when the player sleeps | Reflex | `bot.sleep` | 🔲 |
-| After dying, say so, return to the death spot and pick up its items | Reflex + tool | `death` / `respawn` events | 🔲 |
+| Eat when hungry; top up to 18 when hurt so it heals; rotten flesh only when starving | Reflex | `mineflayer-auto-eat` | ✅ |
+| Ask the player for food when starving with nothing to eat | Reflex → chat | `health` event | ✅ |
+| Equip the best armor it has, whether picked up or put straight in its inventory | Reflex | `mineflayer-armor-manager` + inventory watch | ✅ |
+| Use the right tool for each block | Reflex | Moved to Phase 4: the bot doesn't dig yet | 🔲 |
+| Back off when hurt and a hostile mob is near: run to the player, or away from the mob | Reflex | pathfinder `GoalFollow` / `GoalInvert` | ✅ |
+| Get out of lava, run to water when on fire, swim up when out of air | Reflex | `isInLava`, entity fire flag, `oxygenLevel` | ✅ |
+| Sleep when the player sleeps (on LAN, every player must sleep for the night to skip) | Reflex | `entitySleep` event, `bot.sleep` | ✅ |
+| After dying, say where, and go back for its items on request ("get my stuff"); the agent knows how long until they despawn | Reflex + tool | `death` / `respawn` events, `recover_items`, `last_death` in the state | ✅ |
 
 ## Phase 4: Gathering resources
 
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
 | Chop trees ("get 10 logs") | Tool | `mineflayer-collectblock` | 🔲 |
+| Use the right tool for each block | Reflex | `mineflayer-tool` | 🔲 |
 | Mine a block type ("get 20 cobblestone", "mine that iron") | Tool | `mineflayer-collectblock` | 🔲 |
 | Pick up dropped items nearby | Reflex | `GoalNear` to item entities | 🔲 |
 | Give items to the player ("give me your coal") | Tool | `bot.toss` near the player | 🔲 |

@@ -5,6 +5,7 @@ import pathfinderPkg from 'mineflayer-pathfinder'
 import { installAlerts } from './alerts.js'
 import { CompanionMovements } from './movements.js'
 import { snapshot } from './state.js'
+import { installSurvival } from './survival.js'
 
 const { pathfinder, goals } = pathfinderPkg
 
@@ -100,8 +101,12 @@ let companion = null
 let spawned = false
 let reconnectDelay = reconnectBaseMs
 let bot
+// Survival reflexes for the current connection (see survival.js).
+let survival = null
 
 function updateFollowGoal() {
+  // A reflex (backing off, sleeping, fetching items) is driving; it resumes following when done.
+  if (survival?.busy()) return
   const entity = followTarget && bot.players[followTarget]?.entity
   // The player's entity is missing while they're out of range; entitySpawn retries when they come back.
   if (entity) bot.pathfinder.setGoal(new goals.GoalFollow(entity, followRange), true)
@@ -183,13 +188,22 @@ function goTo({ x, y, z, label }) {
   walkTo(goal, { place, arrived: `Made it to ${place}.` })
 }
 
+// Go back to what the player last asked for after a reflex is done.
+function resume() {
+  if (followTarget) updateFollowGoal()
+  else bot.pathfinder.setGoal(null)
+}
+
 function runAction(action) {
   try {
+    // The player's command wins over whatever reflex is running.
+    survival?.cancel()
     if (action.type === 'follow') follow(action.username)
     else if (action.type === 'stay') stay()
     else if (action.type === 'come') come(action.username)
     else if (action.type === 'goto') goTo(action)
     else if (action.type === 'teleport') teleport(action.username)
+    else if (action.type === 'recover') survival.recoverItems()
     else {
       log('WARN', `unknown action: ${JSON.stringify(action)}`)
       reportError(`I don't know how to do "${action.type}" yet. Is the bot out of date?`)
@@ -228,6 +242,7 @@ function connect() {
       if (player) follow(player)
     }
     installAlerts(bot, say)
+    survival = installSurvival(bot, { say, log, companion: () => companion, resume })
   })
 
   bot.on('entitySpawn', (entity) => {

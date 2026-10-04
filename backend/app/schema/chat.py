@@ -35,6 +35,12 @@ class EntitySighting(BaseModel):
     count: int | None = None
 
 
+class Death(BaseModel):
+    position: Position
+    dimension: str
+    seconds_ago: int
+
+
 class BotState(BaseModel):
     """Snapshot of the bot's situation, sent by the bot with each chat message."""
 
@@ -53,6 +59,8 @@ class BotState(BaseModel):
     # Where the player who is talking is, or None when the bot can't see them.
     player_position: Position | None = None
     player_distance: float | None = None
+    # Set for 5 minutes after the bot dies, while its dropped items can still be picked up.
+    last_death: Death | None = None
 
 
 class ChatRequest(BaseModel):
@@ -69,7 +77,7 @@ class BotAction(BaseModel):
     uses when it reports arriving ("Made it to home.").
     """
 
-    type: Literal['follow', 'stay', 'come', 'goto', 'teleport']
+    type: Literal['follow', 'stay', 'come', 'goto', 'teleport', 'recover']
     username: str | None = None
     x: int | None = None
     y: int | None = None

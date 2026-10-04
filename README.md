@@ -40,6 +40,8 @@ cd bot && npm install       # Node deps
    ```
 4. Type in Minecraft chat. The bot replies.
 
+Teleporting (`"tp to me"`) needs commands allowed: choose **Allow Cheats: ON** when you open the world to LAN.
+
 ## Test
 
 ```sh
@@ -49,7 +51,12 @@ uv run pytest
 
 ## Roadmap
 
-- [x] Chat buddy: joins the world and talks through the agent
-- [ ] Tools: follow player, mine, craft, place blocks, fight (via mineflayer-pathfinder, -collectblock, -pvp)
-- [x] World awareness: nearby blocks, entities, inventory, time of day passed to the agent
-- [ ] More skills: shelter building, getting iron gear, farming
+The full list is in [docs/survival-functionality-plan.md](docs/survival-functionality-plan.md).
+
+- [x] Chat buddy: joins the world and talks through the agent, with errors shown in chat
+- [x] World awareness: health, inventory, nearby blocks and mobs, time of day passed to the agent (Phase 1)
+- [x] Movement: follow, stay, come here, go to coordinates, named places, doors, teleport (Phase 2)
+- [x] Staying alive: eat, wear armor, back off when hurt, sleep, get items back after dying (Phase 3)
+- [ ] Gathering and crafting: chop, mine, craft, smelt (Phases 4–5, need the task system)
+- [ ] Combat, farming, building, base and storage (Phases 6–9)
+- [ ] Long-term goals and companionship (Phases 10–11)

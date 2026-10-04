@@ -66,15 +66,26 @@ def describe_food(food: int) -> str:
     return 'well fed'
 
 
+# Dropped items vanish this long after death.
+ITEM_DESPAWN_SECONDS = 300
+
+
 def describe_status(state: BotState) -> str:
     """One line with the essentials, added to the agent's instructions on every run."""
     held = state.held_item or 'nothing'
-    return (
+    status = (
         f'Your status: health {state.health:g}/20 ({describe_health(state.health)}), '
         f'food {state.food}/20 ({describe_food(state.food)}), '
         f'at {format_position(state.position)} in {describe_dimension(state.dimension)}, '
         f'{describe_time(state.time_of_day)}, {describe_weather(state)}, holding {held}.'
     )
+    if death := state.last_death:
+        left = max(0, (ITEM_DESPAWN_SECONDS - death.seconds_ago) // 60)
+        status += (
+            f' You died {death.seconds_ago // 60} min ago at {format_position(death.position)} '
+            f'in {describe_dimension(death.dimension)}; your dropped items vanish in about {left} min.'
+        )
+    return status
 
 
 def describe_inventory(state: BotState) -> str:

@@ -1,4 +1,5 @@
 // Builds the snapshot of the bot's situation that is sent to the backend with every chat.
+import { lastDeathInfo } from './survival.js'
 
 // How far the bot looks for blocks and entities, in blocks.
 const scanRadius = 32
@@ -59,6 +60,13 @@ function nearbyEntities(bot) {
     .slice(0, 30)
 }
 
+// Where the bot died, while its dropped items are still there to pick up; otherwise null.
+function deathSnapshot() {
+  const death = lastDeathInfo()
+  if (!death) return null
+  return { position: point(death.position), dimension: death.dimension, seconds_ago: death.secondsAgo }
+}
+
 export function snapshot(bot, speaker) {
   const me = bot.entity.position
   const speakerEntity = bot.players[speaker]?.entity
@@ -77,5 +85,6 @@ export function snapshot(bot, speaker) {
     // Null when the player is too far away for the bot to see them.
     player_position: speakerEntity ? point(speakerEntity.position) : null,
     player_distance: speakerEntity ? round1(speakerEntity.position.distanceTo(me)) : null,
+    last_death: deathSnapshot(),
   }
 }
