@@ -1,0 +1,12 @@
+[project]
+name = "minecraft-agent"
+version = "0.1.0"
+description = "A Claude-powered companion that plays Minecraft with you."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi[standard]>=0.142.2",
+    "pydantic-ai-harness[skills]>=0.54.0",
+    "pydantic-ai-slim[anthropic]>=2.54.0",
+    "pydantic-settings>=2.15.0",
+]
