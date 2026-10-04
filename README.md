@@ -46,7 +46,7 @@ Teleporting (`"tp to me"`) needs commands allowed: choose **Allow Cheats: ON** w
 
 ```sh
 cd backend && uv run pytest    # backend: tools, places, memory, errors, status text
-cd bot && npm test             # bot: movement rules, what to dig for an item, jobs
+cd bot && npm test             # bot: movement rules, what to dig for an item, jobs, crafting planner
 ```
 
 In-game checks drive a second player, **ClaudeTester**, through real situations and print PASS or FAIL. They need the backend and bot running and a **test world with cheats on**, because they change it: they set the time to day, give and clear items, summon a husk, kill the bot, and dig near it.
@@ -55,6 +55,7 @@ In-game checks drive a second player, **ClaudeTester**, through real situations 
 cd bot
 npm run check:survival     # commands ignored, armor, backing off, death and item recovery
 npm run check:gathering    # logs, pickaxe needed, progress, stop, giving items
+npm run check:crafting     # stone pickaxe from nothing, torches, iron ingots with a furnace
 ```
 
 ## Roadmap
@@ -66,6 +67,6 @@ The full list is in [docs/survival-functionality-plan.md](docs/survival-function
 - [x] Movement: follow, stay, come here, go to coordinates, named places, doors, teleport (Phase 2)
 - [x] Staying alive: eat, wear armor, back off when hurt, sleep, get items back after dying (Phase 3)
 - [x] Gathering: chop trees, mine stone and ores, dig sand and dirt, hand items over, never near your base (Phase 4)
-- [ ] Crafting and smelting (Phase 5)
+- [x] Crafting and smelting: "make a stone pickaxe" from nothing, torches, iron ingots; gathers what's missing (Phase 5)
 - [ ] Combat, farming, building, base and storage (Phases 6–9)
 - [ ] Long-term goals and companionship (Phases 10–11)

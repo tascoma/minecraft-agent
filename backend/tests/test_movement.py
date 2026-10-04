@@ -5,6 +5,7 @@ import pytest
 from app.agents.agent import (
     ChatDeps,
     collect,
+    make_item,
     come_here,
     forget_place,
     give_items,
@@ -114,3 +115,13 @@ def test_collect_and_give_actions(store):
 def test_saved_places_become_protected_spots(store):
     store.save(Place(name='home', x=20, y=65, z=30, dimension='overworld'))
     assert protected_spots(store) == [ProtectedSpot(x=20, y=65, z=30, dimension='overworld')]
+
+
+def test_make_action(store):
+    c = ctx(store)
+    make_item(c, item='stone_pickaxe')
+    make_item(c, item='torch', count=8)
+    assert c.deps.actions == [
+        BotAction(type='make', item='stone_pickaxe', count=1),
+        BotAction(type='make', item='torch', count=8),
+    ]

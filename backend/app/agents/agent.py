@@ -39,7 +39,11 @@ agent = Agent(
         'You follow the player around by default. Use your movement tools when the player asks you to follow, stop, come over, '
         'or go somewhere. Moves happen after your reply and the bot announces in chat whether they worked, '
         'so say you are on your way, never that you have arrived or teleported. '
-        'Use your lookup tools to check your inventory and surroundings before answering questions about them; never guess.'
+        'If the player asks for something new while you are busy with a job, do the new thing: it replaces the '
+        'current job, unless they say to finish first. '
+        'Use your lookup tools to check your inventory and surroundings before answering questions about them; never guess. '
+        'Earlier messages show what happened before, not now: your status line is the current truth, and when the player '
+        'asks for something again, call the tool again instead of assuming it is already done.'
     ),
     # Skills reads SKILL.md files through its own workspace, so the agent gets no file tools.
     capabilities=[Skills(settings.skills_dir, workspace=LocalWorkspaceBackend(REPO_ROOT))],
@@ -92,12 +96,25 @@ def collect(ctx: RunContext[ChatDeps], item: str, count: int) -> str:
     """Gather an item by breaking the blocks that drop it, e.g. "log" (any tree), "oak_log", "cobblestone",
     "dirt", "sand", "gravel", "coal", "raw_iron". Count is 1 to 64.
 
-    Stone and coal need a pickaxe in your inventory; iron needs a stone pickaxe or better. You dig only
-    while gathering, never near saved places, and never through blocks a player placed. It takes a while
-    and replaces whatever you were doing; the bot reports progress and the result in chat.
+    Stone and coal need a pickaxe and iron a stone pickaxe or better; if you don't have one you make it
+    first. You dig only while gathering, never near saved places, and never through blocks a player
+    placed. It takes a while and replaces whatever you were doing; the bot reports progress in chat.
     """
     ctx.deps.actions.append(BotAction(type='collect', item=item, count=count))
     return f'Started gathering {count} {item}. The bot will report how it goes, so do not claim it is done.'
+
+
+@agent.tool
+def make_item(ctx: RunContext[ChatDeps], item: str, count: int = 1) -> str:
+    """Craft or smelt an item, e.g. "stone_pickaxe", "torch", "chest", "furnace", "iron_ingot", "glass",
+    "cooked_beef". Use the item's Minecraft name. Count is 1 to 64.
+
+    You work out the whole chain yourself: planks from logs, sticks, a crafting table or furnace (placed
+    and picked back up), and you gather missing materials, making any tool you need to mine them. It
+    takes a while and replaces whatever you were doing; the bot reports progress and the result in chat.
+    """
+    ctx.deps.actions.append(BotAction(type='make', item=item, count=count))
+    return f'Started making {count} {item}. The bot will report how it goes, so do not claim it is done.'
 
 
 @agent.tool

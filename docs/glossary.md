@@ -16,23 +16,27 @@ The words this project uses for its own building blocks.
 
 **Action executor**: The part of `bot/index.js` (`runAction`) that takes actions from the backend and performs them with Mineflayer. Logs a warning for any action type it doesn't recognize.
 
-**Action tool**: A tool that changes the world (`follow_player`, `stay_here`, `come_here`, `go_to`, `go_to_place`, `teleport_to_player`, `recover_items`, `collect`, `give_items`). It doesn't touch Minecraft itself; it adds a `BotAction` for the bot to carry out. Compare *query tool*.
+**Action tool**: A tool that changes the world (`follow_player`, `stay_here`, `come_here`, `go_to`, `go_to_place`, `teleport_to_player`, `recover_items`, `collect`, `give_items`, `make_item`). It doesn't touch Minecraft itself; it adds a `BotAction` for the bot to carry out. Compare *query tool*.
 
 **Backend**: The Python process in `backend/`. The bot's "brain": it receives chat, runs the agent, and replies. It's the only part that costs tokens.
 
 **Bot**: The Node process in `bot/`. The bot's "body": a Minecraft player controlled by code, using Mineflayer. It moves, senses and acts, and never costs tokens. Also refers to the in-game player itself, named **Claude**.
 
-**BotAction**: The data shape of an action, defined in `backend/app/schema/chat.py`: a `type` (`follow`, `stay`, `come`, `goto`, `teleport`, `recover`, `collect` or `give`), plus `username` for actions aimed at a player, `x`/`y`/`z`/`label` for `goto`, and `item`/`count`/`protect` for gathering.
+**BotAction**: The data shape of an action, defined in `backend/app/schema/chat.py`: a `type` (`follow`, `stay`, `come`, `goto`, `teleport`, `recover`, `collect`, `give` or `make`), plus `username` for actions aimed at a player, `x`/`y`/`z`/`label` for `goto`, and `item`/`count` for gathering and making.
 
 **ChatDeps**: The per-request deps object for the agent, in `backend/app/agents/agent.py`. Holds who is talking, the bot's state snapshot, the saved places, and the list of actions tools have recorded during the run.
 
 **Companion**: The player the bot plays with: the first one it followed. Players who join later don't pull it away, and survival reflexes run to the companion when the bot is hurt.
+
+**Family (ingredient family)**: Ingredients recipes treat as interchangeable: any planks, any log, any cobblestone-like block, coal or charcoal. The crafting planner counts a family together and picks the exact recipe variant (oak or birch planks, say) only when crafting.
 
 **Functionality**: Something the player experiences, like "the bot follows me". Not a code unit: it's built from some combination of reflexes, tools and skills.
 
 **Job (task)**: Something that takes a while, like "get 20 cobblestone" or handing items over. One runs at a time (`bot/tasks.js`); "stop", any new command, or dying cancels it. The bot announces progress and the result in chat, and the job is in the state snapshot.
 
 **Man-made block**: A block a player probably placed: planks, glass, bricks, doors, chests, beds, torches, farmland, crops and so on (`isManMade` in `bot/movements.js`). The bot never breaks these, even while gathering.
+
+**Make job**: What `make_item` starts: craft or smelt an item, working out and doing every step, including gathering materials and making tools to gather them (`bot/crafting.js`).
 
 **Named place**: A position saved under a name ("home", "the mine") with `save_place`, kept in `backend/data/places.json` so it survives restarts. The agent sees every saved name and its distance on each run. Sometimes called a waypoint.
 
@@ -120,7 +124,7 @@ The words this project uses for its own building blocks.
 
 **Player chat**: A chat message typed by a player, which Minecraft sends with the sender's UUID. The bot only answers these, not server or command messages.
 
-**Plugin**: An add-on that extends Mineflayer, loaded with `bot.loadPlugin(...)`. In use: `mineflayer-pathfinder`, `mineflayer-auto-eat`, `mineflayer-armor-manager`, `mineflayer-collectblock` and `mineflayer-tool`. Planned: `mineflayer-pvp`.
+**Plugin**: An add-on that extends Mineflayer, loaded with `bot.loadPlugin(...)`. In use: `mineflayer-pathfinder`, `mineflayer-auto-eat`, `mineflayer-armor-manager` and `mineflayer-tool`. Planned: `mineflayer-pvp`. (`mineflayer-collectblock` was tried and dropped: it could wait forever for an item drop.)
 
 **Spawn**: The moment the bot appears in the world after connecting, or after dying. The bot sets up movement and starts following only after spawn.
 
@@ -167,7 +171,11 @@ The words this project uses for its own building blocks.
 
 **Dimension**: The Overworld, the Nether or the End.
 
+**Crafting table / furnace (workstation)**: Blocks needed for most tools (crafting table) and for smelting (furnace). The bot uses one within 16 blocks, or makes one, places it, and picks it back up when the job is done.
+
 **Durability**: How many more uses a tool or armor piece has before it breaks.
+
+**Smelting**: Cooking an item in a furnace with fuel: raw iron to iron ingots, sand to glass, logs to charcoal, raw meat to cooked. About 10 seconds per item. Minecraft data has no smelting recipes, so the common ones are listed in `bot/crafting.js`.
 
 **Hostile mob**: A mob that attacks players, such as a zombie, skeleton, spider or creeper. Most spawn in the dark.
 

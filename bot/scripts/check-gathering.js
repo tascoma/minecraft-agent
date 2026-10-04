@@ -3,7 +3,7 @@
 // Run: npm run check:gathering (with the backend and bot running, trees and stone nearby)
 import { joinTester, sleep } from './tester.js'
 
-const result = /^Got \d+|only got|couldn't get|don't know how|need a/
+const result = /^Got \d+|only got|couldn't get|don't know how/
 
 joinTester(async ({ companion: bot, say, command, waitFor, check }) => {
   command(`/clear ${bot} stone_pickaxe`)
@@ -14,9 +14,10 @@ joinTester(async ({ companion: bot, say, command, waitFor, check }) => {
   const logs = await waitFor(result, 180000)
   check('chops logs', /^Got 3 logs/.test(logs ?? ''), logs)
 
+  // No pickaxe: it should make a wooden one itself (Phase 5), then mine.
   say('get 4 cobblestone')
-  const noPick = await waitFor(result, 60000)
-  check('says it needs a pickaxe', /need a pickaxe/.test(noPick ?? ''), noPick)
+  const noPick = await waitFor(result, 240000)
+  check('makes its own pickaxe for cobblestone', /^Got 4 cobblestone/.test(noPick ?? ''), noPick)
 
   command(`/give ${bot} stone_pickaxe`)
   await sleep(1000)

@@ -92,11 +92,11 @@ class BotAction(BaseModel):
     """Something the bot should do in the world besides chatting.
 
     follow/come/teleport: `username` is the player. goto: `x`, `z`, optional `y`, and an optional `label` the bot
-    uses when it reports arriving ("Made it to home."). collect: `item` and `count`. give: `username`, `item`,
-    and `count` (None for all of it).
+    uses when it reports arriving ("Made it to home."). collect and make: `item` and `count`. give: `username`,
+    `item`, and `count` (None for all of it).
     """
 
-    type: Literal['follow', 'stay', 'come', 'goto', 'teleport', 'recover', 'collect', 'give']
+    type: Literal['follow', 'stay', 'come', 'goto', 'teleport', 'recover', 'collect', 'give', 'make']
     username: str | None = None
     x: int | None = None
     y: int | None = None

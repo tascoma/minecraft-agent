@@ -4,6 +4,7 @@
 import pathfinderPkg from 'mineflayer-pathfinder'
 import { loader as autoEat } from 'mineflayer-auto-eat'
 import armorManager from 'mineflayer-armor-manager'
+import { goWithin } from './walk.js'
 
 const { goals } = pathfinderPkg
 
@@ -25,6 +26,10 @@ const itemPickupRange = 8
 const bedRange = 16
 // Don't repeat the same reflex announcement more often than this.
 const announceMs = 30_000
+// Walking back to where it died, and to each dropped item, can't take longer than this.
+const recoverWalkMs = 90_000
+const pickupWalkMs = 10_000
+const bedWalkMs = 60_000
 
 // Where the bot last died. Kept across reconnects so "get my stuff" still works.
 let lastDeath = null
@@ -176,7 +181,7 @@ export function installSurvival(bot, { say, log, companion, resume }) {
     start('sleep')
     try {
       const { x, y, z } = beds[0].position
-      await bot.pathfinder.goto(new goals.GoalNear(x, y, z, 2))
+      await goWithin(bot, new goals.GoalNear(x, y, z, 2), bedWalkMs)
       await bot.sleep(beds[0])
       log('INFO', 'sleeping')
     } catch (err) {
@@ -215,7 +220,7 @@ export function installSurvival(bot, { say, log, companion, resume }) {
       if (!item) break
       const { x, y, z } = item.position.floored()
       try {
-        await bot.pathfinder.goto(new goals.GoalNear(x, y, z, 0))
+        await goWithin(bot, new goals.GoalNear(x, y, z, 0), pickupWalkMs)
         await new Promise((r) => setTimeout(r, 300)) // give the server a moment to hand it over
       } catch (err) {
         if (err.name === 'GoalChanged' || err.name === 'PathStopped') break
@@ -238,7 +243,7 @@ export function installSurvival(bot, { say, log, companion, resume }) {
     start('recover')
     const { x, y, z } = death.position
     try {
-      await bot.pathfinder.goto(new goals.GoalNear(x, y, z, 2))
+      await goWithin(bot, new goals.GoalNear(x, y, z, 2), recoverWalkMs)
       await collectItems(death.position)
       if (reflex !== 'recover') return
       const { picked } = lastDeath

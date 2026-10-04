@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import mineflayer from 'mineflayer'
 import pathfinderPkg from 'mineflayer-pathfinder'
 import { installAlerts } from './alerts.js'
+import { installCrafting } from './crafting.js'
 import { installGathering } from './gathering.js'
 import { CompanionMovements, setProtectedSpots } from './movements.js'
 import { snapshot } from './state.js'
@@ -120,6 +121,7 @@ let bot
 // Survival reflexes and gathering jobs for the current connection (see survival.js, gathering.js).
 let survival = null
 let gathering = null
+let crafting = null
 
 function updateFollowGoal() {
   // A reflex (backing off, sleeping, fetching items) or a job (gathering) is driving; it resumes
@@ -227,6 +229,7 @@ function runAction(action) {
     else if (action.type === 'recover') survival.recoverItems()
     else if (action.type === 'collect') gathering.collect(action)
     else if (action.type === 'give') gathering.give(action)
+    else if (action.type === 'make') crafting.make(action)
     else {
       log('WARN', `unknown action: ${JSON.stringify(action)}`)
       reportError(`I don't know how to do "${action.type}" yet. Is the bot out of date?`)
@@ -268,6 +271,7 @@ function connect() {
     installAlerts(bot, say)
     survival = installSurvival(bot, { say, log, companion: () => companion, resume })
     gathering = installGathering(bot, { say, log, survival, resume })
+    crafting = installCrafting(bot, { say, log, gathering, resume })
   })
 
   bot.on('entitySpawn', (entity) => {

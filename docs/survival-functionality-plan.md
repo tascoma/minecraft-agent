@@ -82,11 +82,11 @@ The bot digs only while gathering, never within 16 blocks (horizontally) of a sa
 
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
-| Chop trees ("get 10 logs") | Tool | `collect`, `mineflayer-collectblock` | ✅ |
-| Use the right tool for each block | Reflex | `mineflayer-tool` (via collectblock) | ✅ |
-| Mine a block type ("get 20 cobblestone", "get some coal"); says which pickaxe it's missing | Tool | `collect`, block drop data from `minecraft-data` | ✅ |
+| Chop trees ("get 10 logs") | Tool | `collect`, pathfinder + `bot.dig` | ✅ |
+| Use the right tool for each block | Reflex | `mineflayer-tool` | ✅ |
+| Mine a block type ("get 20 cobblestone", "get some coal"); makes the pickaxe it needs first | Tool | `collect`, block drop data from `minecraft-data` | ✅ |
 | Collect sand, gravel, dirt, clay and other surface blocks | Tool | `collect` | ✅ |
-| Pick up the drops of blocks it breaks | Reflex | `mineflayer-collectblock` | ✅ |
+| Pick up the drops of blocks it breaks (up to 5 seconds per block) | Reflex | walking to item entities | ✅ |
 | Pick up any dropped items nearby | Reflex | Not built: it would also grab the player's drops | 🔲 |
 | Give items to the player ("give me your coal") | Tool | `give_items`, `bot.toss` | ✅ |
 | Strip-mine or branch-mine at a chosen Y level | Tool + skill | `bot.dig` + pathfinder | 🔲 |
@@ -96,14 +96,19 @@ Tested in game: logs, cobblestone without and with a pickaxe, stopping a job, an
 
 ## Phase 5: Crafting and smelting
 
+One tool, `make_item(item, count)`, runs a job (`bot/crafting.js`) that works out the whole chain as it goes: logs → planks → sticks → crafting table → tool. It gathers missing raw materials and makes any tool it needs to gather them (a wooden pickaxe for stone, a stone pickaxe for iron). Interchangeable ingredients (any planks, any log, any cobblestone-like block, coal or charcoal) are planned together, and the exact recipe is picked when crafting from whatever the bot has. A crafting table or furnace within 16 blocks is used; otherwise the bot makes one, places it, and picks it back up afterwards (a furnace only with a pickaxe).
+
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
-| Craft an item, including the steps leading up to it ("make a stone pickaxe") | Tool | `bot.recipesFor`, `bot.craft` | 🔲 |
-| Place and use a crafting table when the recipe needs one | Tool | `bot.placeBlock`, `bot.craft` | 🔲 |
-| Smelt ores and cook food in a furnace | Tool | `bot.openFurnace` | 🔲 |
-| Make tools, weapons and armor as materials allow | Skill | tier progression playbook | 🔲 |
-| Replace a tool when it's about to break | Reflex | item durability check | 🔲 |
-| Make torches, chests, beds, doors and other basics | Tool | `bot.craft` | 🔲 |
+| Craft an item, including the steps leading up to it ("make a stone pickaxe") | Tool | `make_item`, `bot.recipesFor`, `bot.craft` | ✅ |
+| Place and use a crafting table when the recipe needs one, then pick it back up | Tool | `bot.placeBlock`, `bot.craft`, `bot.dig` | ✅ |
+| Smelt ores and cook food in a furnace, choosing fuel | Tool | `make_item`, `bot.openFurnace`, smelting table in `crafting.js` | ✅ |
+| Gather missing raw materials during a craft, making the tools needed to mine them | Tool | `gathering.gather` with a tool maker | ✅ |
+| Make tools, weapons and armor as materials allow | Skill | `skills/tool-progression` | ✅ |
+| Replace a tool when it's about to break | Reflex | Partly: when a job needs a tool it doesn't have, it makes one | 🔲 |
+| Make torches, chests, beds, doors and other basics | Tool | `make_item` | ✅ |
+
+Tested in game (`npm run check:crafting`): a stone pickaxe from an empty inventory, torches, and iron ingots with a furnace it made and placed.
 
 ## Phase 6: Combat and defense
 
@@ -191,7 +196,7 @@ Phases 4 onward need these before they work well:
 ## Suggested order
 
 1. ~~Phase 1 (world awareness) and the task system.~~ Done; the task system runs one job at a time.
-2. ~~Phase 3 (staying alive)~~ done. Phase 6 reflexes (fighting back) are next, so the bot can survive while doing work.
-3. ~~Phase 4 (gathering)~~ done. Phase 5 (crafting) next, which is when the bot starts to be useful on its own (it can't even make a pickaxe yet).
+2. ~~Phase 3 (staying alive)~~ done. Phase 6 reflexes (fighting back) are next: night mobs still kill it mid-job.
+3. ~~Phases 4 and 5 (gathering, crafting)~~ done. The bot can now go from nothing to stone tools, torches and iron ingots by itself.
 4. Phases 7–9 (farming, building, base).
 5. Phases 10–11 (long-term goals and companionship).

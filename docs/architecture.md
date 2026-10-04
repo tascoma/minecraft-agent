@@ -133,6 +133,7 @@ A **functionality** is something the player experiences, such as "the bot follow
 | Survives the first night *(today: advice only)* | — | — | `survive-first-night` |
 | Stays alive while playing | Eat, wear armor, back off when hurt, sleep when you sleep | `recover_items` after dying | — |
 | Gets me 10 logs | Use the right tool, pick up drops, back off if hurt | `collect("log", 10)` | — |
+| Makes me a stone pickaxe | Eat, back off if hurt | `make_item("stone_pickaxe")`, which gathers and crafts the whole chain | `tool-progression` |
 | Gets a full set of iron gear *(planned)* | Eat, fight back, pick up drops | `mine_block`, `craft_item`, `smelt` | `iron-gear` |
 
 The full list is in [survival-functionality-plan.md](survival-functionality-plan.md).
@@ -202,6 +203,8 @@ bot/
   survival.js                reflexes: eat, armor, back off when hurt, escape lava/fire/water, sleep, item recovery
   tasks.js                   the current job (one at a time, cancellable, with progress)
   gathering.js               collect and give jobs: what to break for an item, protected areas
+  crafting.js                make jobs: recipe chains, smelting, placing and picking up workstations
+  walk.js                    walking with a time limit, for every walk inside a job or reflex
   test/                      unit tests (npm test), no Minecraft needed
   scripts/                   in-game checks with a second player (npm run check:*)
   patches/                   fixes to npm packages, applied by patch-package on npm install
@@ -242,7 +245,7 @@ Everything between the two processes goes through `POST /chat`:
 // response (backend → bot)
 { "reply": "Got it!", "actions": [{ "type": "stay", "username": null }] }
 // action types: follow, stay, come, goto (x, y?, z, label?), teleport, recover,
-//               collect (item, count, protect), give (username, item, count?)
+//               collect (item, count), give (username, item, count?), make (item, count)
 ```
 
 When something fails, the backend answers with an error status and `{ "error": "Claude is rate limiting me. Try again in a moment." }`. The message is written for the player (`app/core/errors.py`). The bot says it in chat as `Error: ...` and writes the full details to the logs. The bot reports its own failures the same way: backend unreachable or slow, an action that throws, an unexpected crash. Repeats of the same error are muted for 10 seconds.
@@ -262,7 +265,7 @@ When adding an action, change both sides together: add the type to `BotAction` i
 
 Most functionalities need two or three of these. A typical new action:
 
-1. Bot: implement it with Mineflayer (e.g. `collectBlock(type, count)`).
+1. Bot: implement it with Mineflayer (e.g. `gathering.collect({ item, count })`).
 2. Schema: add the action type to `BotAction`.
 3. Backend: add a tool that appends the action, with a clear docstring.
 4. Bot: handle the new type in `runAction`.
@@ -307,7 +310,10 @@ flowchart LR
 `mineflayer-pathfinder` 2.4.5 has door support, but it's off by default and doesn't work properly:
 
 - It only opens fence gates, and treats every door, open or closed, as a wall. `bot/movements.js` fixes this by checking each door's and gate's actual state.
-- After opening a gate or door, it stays in "placing a block" mode. If the bot carries dirt or cobblestone, it then throws on every tick. `bot/patches/mineflayer-pathfinder+2.4.5.patch` fixes that, and `patch-package` reapplies it on every `npm install`.
+- After opening a gate or door, it stays in "placing a block" mode. If the bot carries dirt or cobblestone, it then throws on every tick.
+- When it smooths a finished route, it puts any step that passes through a door or gate on top of the door's thin panel, a jump the bot can't make. The bot then stands still in front of an open door forever.
+
+`bot/patches/mineflayer-pathfinder+2.4.5.patch` fixes both, and `patch-package` reapplies it on every `npm install`.
 
 If you upgrade `mineflayer-pathfinder`, check whether the patch is still needed. `npm install` fails loudly if it no longer applies.
 
@@ -316,5 +322,10 @@ If you upgrade `mineflayer-pathfinder`, check whether the patch is still needed.
 ## 8. Limits that keep the bot stable
 
 - **One block at a time, 45 seconds each.** A gathering job gives up on a block it can't reach in 45 seconds and tries another, so the pathfinder can't stall a job by re-planning forever.
+- **Every walk inside a job or reflex has a time limit** (`bot/walk.js`): the pathfinder never gives up on its own. Going back for items after dying gets 90 seconds, each dropped item 10, a workstation 60. Trips the player asks for ("go to …") have no limit; "stop" ends them.
+- **The bot mines blocks itself** (walk, equip, dig, pick up drops for up to 5 seconds) instead of using `mineflayer-collectblock`, which waited forever for a drop it couldn't reach and froze jobs.
 - **Path search radius during jobs.** With digging allowed, almost every block is a possible route, and an unbounded path search ran the bot out of memory (4 GB) once. During jobs the pathfinder only searches 80 blocks around the bot; targets are never more than 48 away.
 - **Dying cancels the job.** The items are gone and the bot respawns somewhere else.
+- **60 steps per make job.** Every gather, craft, smelt and placement counts; a chain that runs away gives up with a message instead of looping.
+- **Unreachable blocks are remembered for 5 minutes**, across jobs, so the bot doesn't keep climbing the same half-chopped tree. It also prefers blocks near its own height over logs high in a canopy.
+- **The inventory gets a moment to catch up after each craft.** `bot.craft` can return before the server's inventory update arrives; counting too early made the next craft fail.
