@@ -79,7 +79,11 @@ export class CompanionMovements extends Movements {
     if (!b.openable) return b
     const { open, half } = b.getProperties()
     // Open: walk straight through. Upper half of a closed door: opening the lower half opens both.
-    if (open || half === 'upper') Object.assign(b, { safe: true, physical: false, openable: false })
+    // The height has to go too: it comes from the door's collision shape, and a 1-block-tall door
+    // panel otherwise looks like a step to jump onto, which the bot then can't do.
+    if (open || half === 'upper') {
+      Object.assign(b, { safe: true, physical: false, openable: false, height: b.position.y })
+    }
     return b
   }
 }

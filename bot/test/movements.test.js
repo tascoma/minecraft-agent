@@ -52,6 +52,13 @@ describe('CompanionMovements', () => {
     }
   })
 
+  it('treats an open door as flat, not a step to jump onto', () => {
+    const bot = fakeBot()
+    const m = new CompanionMovements(bot)
+    bot.stateId = blockState('oak_door', { open: true, half: 'lower' })
+    assert.equal(at(m).height, 64)
+  })
+
   it('never breaks man-made blocks', () => {
     const bot = fakeBot()
     const m = new CompanionMovements(bot, { gather: true })
