@@ -3,9 +3,10 @@ import fs from 'node:fs'
 import mineflayer from 'mineflayer'
 import pathfinderPkg from 'mineflayer-pathfinder'
 import { installAlerts } from './alerts.js'
+import { CompanionMovements } from './movements.js'
 import { snapshot } from './state.js'
 
-const { pathfinder, Movements, goals } = pathfinderPkg
+const { pathfinder, goals } = pathfinderPkg
 
 const host = process.env.MC_HOST ?? 'localhost'
 const port = Number(process.env.MC_PORT ?? 25565)
@@ -13,6 +14,8 @@ const username = process.env.MC_USERNAME ?? 'Claude'
 const backendUrl = process.env.BACKEND_URL ?? 'http://127.0.0.1:8000'
 // How close the bot tries to stay to the player it follows, in blocks.
 const followRange = 3
+// How close the bot gets when called over with "come here", in blocks.
+const comeRange = 2
 // Wait before reconnecting after a disconnect, doubling up to the max while the world stays closed.
 const reconnectBaseMs = 5_000
 const reconnectMaxMs = 60_000
@@ -63,6 +66,9 @@ async function backendErrorMessage(err, res) {
 
 // Username of the player being followed, or null when staying put. Kept across reconnects.
 let followTarget = null
+// The player the bot is playing with: the first one it followed. Once set, players who join
+// later don't pull the bot away, even while it's staying put or walking somewhere.
+let companion = null
 let spawned = false
 let reconnectDelay = reconnectBaseMs
 let bot
@@ -75,20 +81,58 @@ function updateFollowGoal() {
 
 function follow(name) {
   followTarget = name
+  companion ??= name
   log('INFO', `following ${name}`)
   updateFollowGoal()
 }
 
+// Stop following or walking anywhere and stand still.
 function stay() {
   followTarget = null
   bot.pathfinder.setGoal(null)
   log('INFO', 'staying put')
 }
 
+// Walk to a goal once, then stand there. Says in chat how the trip went, so the player
+// doesn't have to ask (and it costs no tokens).
+async function walkTo(goal, { place, arrived }) {
+  followTarget = null
+  log('INFO', `walking to ${place}`)
+  try {
+    await bot.pathfinder.goto(goal)
+    log('INFO', `arrived at ${place}`)
+    say(arrived)
+  } catch (err) {
+    // Another order (stay, follow, a new destination) replaced this trip, so there's nothing to report.
+    if (err.name === 'GoalChanged' || err.name === 'PathStopped') return
+    log('WARN', `could not reach ${place}: ${err.message}`)
+    say(`I can't find a way to ${place}.`)
+  }
+}
+
+function come(name) {
+  const entity = bot.players[name]?.entity
+  if (!entity) {
+    say(`I can't see you, ${name}. Tell me your coordinates and I'll head there.`)
+    return
+  }
+  const { x, y, z } = entity.position.floored()
+  walkTo(new goals.GoalNear(x, y, z, comeRange), { place: name, arrived: "I'm here." })
+}
+
+function goTo({ x, y, z, label }) {
+  const place = label ?? (y == null ? `(${x}, ${z})` : `(${x}, ${y}, ${z})`)
+  // Without a height, any block in that column will do.
+  const goal = y == null ? new goals.GoalXZ(x, z) : new goals.GoalNear(x, y, z, 1)
+  walkTo(goal, { place, arrived: `Made it to ${place}.` })
+}
+
 function runAction(action) {
   try {
     if (action.type === 'follow') follow(action.username)
     else if (action.type === 'stay') stay()
+    else if (action.type === 'come') come(action.username)
+    else if (action.type === 'goto') goTo(action)
     else {
       log('WARN', `unknown action: ${JSON.stringify(action)}`)
       reportError(`I don't know how to do "${action.type}" yet. Is the bot out of date?`)
@@ -118,13 +162,14 @@ function connect() {
     log('INFO', `joined ${host}:${port} as ${username}`)
     spawned = true
     reconnectDelay = reconnectBaseMs
-    const movements = new Movements(bot)
-    movements.canDig = false // don't break the player's builds while walking around
-    bot.pathfinder.setMovements(movements)
+    bot.pathfinder.setMovements(new CompanionMovements(bot))
     say('Hi! I am here.')
-    // Resume following whoever we followed before a reconnect, otherwise pick the first player.
-    const player = followTarget ?? Object.keys(bot.players).find((name) => name !== bot.username)
-    if (player) follow(player)
+    // After a reconnect, keep doing what we were doing: follow the same player, or stay put.
+    if (followTarget) follow(followTarget)
+    else if (!companion) {
+      const player = Object.keys(bot.players).find((name) => name !== bot.username)
+      if (player) follow(player)
+    }
     installAlerts(bot, say)
   })
 
@@ -135,7 +180,7 @@ function connect() {
   // Players already online at login are handled in spawn; this catches anyone joining later.
   bot.on('playerJoined', (player) => {
     if (!spawned) return
-    if (!followTarget && player.username !== bot.username) follow(player.username)
+    if (!companion && player.username !== bot.username) follow(player.username)
   })
 
   bot.on('chat', async (sender, message) => {

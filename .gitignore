@@ -58,3 +58,6 @@ Thumbs.db
 
 # --- Mineflayer bot ---
 bot/node_modules/
+
+# Things the agent remembers (named places, ...)
+backend/data/

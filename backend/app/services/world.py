@@ -3,6 +3,7 @@
 from collections import Counter
 
 from app.schema.chat import BotState, Position
+from app.services.places import Place
 
 # Ticks per real second, and when hostile mobs start and stop spawning.
 TICKS_PER_SECOND = 20
@@ -26,6 +27,12 @@ def describe_weather(state: BotState) -> str:
     if state.thundering:
         return 'thunderstorm'
     return 'raining' if state.raining else 'clear'
+
+
+def describe_dimension(dimension: str) -> str:
+    """'the_nether' -> 'the Nether', so sentences read "in the Nether" rather than "in the the_nether"."""
+    name = dimension.removeprefix('the_').replace('_', ' ').title()
+    return f'the {name}'
 
 
 def format_position(p: Position) -> str:
@@ -65,7 +72,7 @@ def describe_status(state: BotState) -> str:
     return (
         f'Your status: health {state.health:g}/20 ({describe_health(state.health)}), '
         f'food {state.food}/20 ({describe_food(state.food)}), '
-        f'at {format_position(state.position)} in the {state.dimension}, '
+        f'at {format_position(state.position)} in {describe_dimension(state.dimension)}, '
         f'{describe_time(state.time_of_day)}, {describe_weather(state)}, holding {held}.'
     )
 
@@ -105,10 +112,27 @@ def describe_entities(state: BotState) -> str:
 
 
 def describe_location(state: BotState, username: str) -> str:
-    here = f'You are at {format_position(state.position)} in the {state.dimension}.'
+    here = f'You are at {format_position(state.position)} in {describe_dimension(state.dimension)}.'
     if state.player_position is None or state.player_distance is None:
         return f"{here} {username} is out of sight, so they are probably far away."
     return (
         f'{here} {username} is at {format_position(state.player_position)}, '
         f'{state.player_distance:g} blocks from you.'
     )
+
+
+def describe_places(places: list[Place], state: BotState | None) -> str:
+    if not places:
+        return 'No saved places yet.'
+    parts = []
+    for p in places:
+        text = f'{p.name} at ({p.x}, {p.y}, {p.z})'
+        if state and p.dimension == state.dimension:
+            # Straight-line distance, rounded; the walk is usually longer.
+            here = state.position
+            distance = ((p.x - here.x) ** 2 + (p.y - here.y) ** 2 + (p.z - here.z) ** 2) ** 0.5
+            text += f', {distance:.0f} blocks away'
+        else:
+            text += f' in {describe_dimension(p.dimension)}'
+        parts.append(text)
+    return 'Saved places: ' + '; '.join(parts) + '.'

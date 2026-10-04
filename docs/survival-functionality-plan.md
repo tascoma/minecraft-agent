@@ -42,16 +42,19 @@ The agent can't make good decisions without knowing what's going on. Before the 
 
 ## Phase 2: Movement and navigation
 
+The bot does one thing at a time: follow, stand still, or walk somewhere. When it walks somewhere it says in chat whether it arrived or got stuck, without calling the agent. The full task queue waits for Phase 4.
+
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
-| Come to the player now ("come here") | Tool | `GoalNear` | 🔲 |
-| Go to coordinates | Tool | `GoalBlock` / `GoalXZ` | 🔲 |
-| Remember named places ("this is home", "the mine") and go back to them | Tool + memory | saved waypoints | 🔲 |
-| Explore in a direction and report what it finds | Tool | `GoalXZ` + Phase 1 scans | 🔲 |
-| Swim, climb ladders, open doors and gates | Reflex | pathfinder `Movements` | 🔲 |
-| Avoid lava, cliffs and deep water | Reflex | pathfinder `Movements` costs | 🔲 |
-| Build up or bridge across gaps when stuck | Reflex | `Movements.scafoldingBlocks` | 🔲 |
-| Stop or cancel whatever it's doing ("stop") | Tool | `pathfinder.stop()`, task cancel | 🔲 |
+| Come to the player now and wait there ("come here") | Tool | `come_here`, `GoalNear` | ✅ |
+| Go to coordinates | Tool | `go_to`, `GoalNear` / `GoalXZ` | ✅ |
+| Remember named places ("this is home", "the mine") and go back to them | Tool + memory | `save_place`, `go_to_place`, `forget_place`; `backend/data/places.json` | ✅ |
+| Say when it arrives or can't find a way | Bot | `pathfinder.goto` promise | ✅ |
+| Explore in a direction and report what it finds | Tool | `GoalXZ` + Phase 1 scans; needs bot → backend events | 🔲 |
+| Swim, climb ladders, open doors and gates | Reflex | `bot/movements.js` (wooden doors and gates; iron ones need redstone) | ✅ |
+| Avoid lava, cliffs and deep water | Reflex | `bot/movements.js`: lava avoided, `maxDropDown` 3, `liquidCost` 5 | ✅ |
+| Build up or bridge across gaps when stuck | Reflex | `Movements.scafoldingBlocks`; waits for Phase 4 so it has blocks | 🔲 |
+| Stop whatever it's doing ("stop") | Tool | `stay_here` | ✅ |
 
 ## Phase 3: Staying alive (reflexes)
 

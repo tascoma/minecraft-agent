@@ -1,0 +1,16 @@
+diff --git a/node_modules/mineflayer-pathfinder/index.js b/node_modules/mineflayer-pathfinder/index.js
+index b38bd30..5295f12 100644
+--- a/node_modules/mineflayer-pathfinder/index.js
++++ b/node_modules/mineflayer-pathfinder/index.js
+@@ -524,6 +524,11 @@ function inject (bot) {
+         bot.activateBlock(bot.blockAt(new Vec3(placingBlock.x, placingBlock.y, placingBlock.z))).then(() => {
+           lockUseBlock.release()
+           placingBlock = nextPoint.toPlace.shift()
++          // Opening was the last step: go back to walking instead of "placing" an undefined block.
++          if (!placingBlock) {
++            placing = false
++            lastNodeTime = performance.now()
++          }
+         }, err => {
+           console.error(err)
+           lockUseBlock.release()

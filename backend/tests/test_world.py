@@ -19,7 +19,7 @@ def make_state(**overrides) -> BotState:
 def test_status_line():
     status = world.describe_status(make_state())
     assert status == (
-        'Your status: health 17.5/20 (healthy), food 14/20 (a bit hungry, not healing), at (10, 64, -3) in the overworld, '
+        'Your status: health 17.5/20 (healthy), food 14/20 (a bit hungry, not healing), at (10, 64, -3) in the Overworld, '
         'day, about 6 min until night, clear, holding stone_pickaxe.'
     )
 
@@ -72,6 +72,6 @@ def test_low_health_and_food_are_flagged():
 def test_location_with_and_without_player():
     seen = make_state(player_position={'x': 20, 'y': 64, 'z': -3}, player_distance=10)
     assert world.describe_location(seen, 'Steve') == (
-        'You are at (10, 64, -3) in the overworld. Steve is at (20, 64, -3), 10 blocks from you.'
+        'You are at (10, 64, -3) in the Overworld. Steve is at (20, 64, -3), 10 blocks from you.'
     )
     assert 'out of sight' in world.describe_location(make_state(), 'Steve')

@@ -63,10 +63,18 @@ class ChatRequest(BaseModel):
 
 
 class BotAction(BaseModel):
-    """Something the bot should do in the world besides chatting."""
+    """Something the bot should do in the world besides chatting.
 
-    type: Literal['follow', 'stay']
+    follow/come: `username` is the player. goto: `x`, `z`, optional `y`, and an optional `label` the bot
+    uses when it reports arriving ("Made it to home.").
+    """
+
+    type: Literal['follow', 'stay', 'come', 'goto']
     username: str | None = None
+    x: int | None = None
+    y: int | None = None
+    z: int | None = None
+    label: str | None = None
 
 
 class ChatResponse(BaseModel):

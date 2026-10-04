@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     anthropic_api_key: SecretStr
     model_name: str = 'claude-haiku-4-5'
     skills_dir: Path = REPO_ROOT / 'skills'
+    # Things the agent remembers between runs, like named places.
+    data_dir: Path = REPO_ROOT / 'backend' / 'data'
 
     host: str = '127.0.0.1'
     port: int = 8000

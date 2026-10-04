@@ -9,6 +9,7 @@ from pydantic_ai_harness.skills import Skills
 from app.core.config import REPO_ROOT, get_settings
 from app.schema.chat import BotAction, BotState
 from app.services import world
+from app.services.places import Place, PlaceStore, get_place_store
 
 settings = get_settings()
 
@@ -19,6 +20,7 @@ class ChatDeps:
     # None when the bot didn't send its state (e.g. an older bot or a test request).
     state: BotState | None = None
     actions: list[BotAction] = field(default_factory=list)
+    places: PlaceStore = field(default_factory=get_place_store)
 
 
 agent = Agent(
@@ -30,7 +32,9 @@ agent = Agent(
     instructions=(
         'You are a friendly Minecraft companion who plays alongside the user in their world. '
         'Your replies are sent as in-game chat, so keep them short: one or two sentences, plain text, no Markdown. '
-        'You follow the player around by default. Use your tools when the player asks you to come along or to stay put. '
+        'You follow the player around by default. Use your movement tools when the player asks you to follow, stop, come over, '
+        'or go somewhere. Walking takes time: the bot announces in chat when it arrives or gets stuck, '
+        'so say you are on your way, never that you have arrived. '
         'Use your lookup tools to check your inventory and surroundings before answering questions about them; never guess.'
     ),
     # Skills reads SKILL.md files through its own workspace, so the agent gets no file tools.
@@ -47,9 +51,59 @@ def follow_player(ctx: RunContext[ChatDeps]) -> str:
 
 @agent.tool
 def stay_here(ctx: RunContext[ChatDeps]) -> str:
-    """Stop following and stand still where you are."""
+    """Stop whatever you're doing (following, walking somewhere) and stand still. Use for "stop", "wait" and "stay here"."""
     ctx.deps.actions.append(BotAction(type='stay'))
-    return 'Staying here.'
+    return 'Stopped. Standing still.'
+
+
+@agent.tool
+def come_here(ctx: RunContext[ChatDeps]) -> str:
+    """Walk over to the player who is talking to you once, then wait next to them (not follow)."""
+    ctx.deps.actions.append(BotAction(type='come', username=ctx.deps.username))
+    return f'Walking over to {ctx.deps.username}.'
+
+
+@agent.tool
+def go_to(ctx: RunContext[ChatDeps], x: int, z: int, y: int | None = None) -> str:
+    """Walk to coordinates and wait there. Leave y out if the player only gave x and z."""
+    ctx.deps.actions.append(BotAction(type='goto', x=x, y=y, z=z))
+    return f'Walking to ({x}, {z}).' if y is None else f'Walking to ({x}, {y}, {z}).'
+
+
+@agent.tool
+def save_place(ctx: RunContext[ChatDeps], name: str) -> str:
+    """Remember where the player is standing under a name, like "home" or "mine", to go back later.
+
+    Replaces any place with the same name. Uses your own position if you can't see the player.
+    """
+    state = ctx.deps.state
+    if not state:
+        return NO_STATE
+    pos, whose = (state.player_position, 'their') if state.player_position else (state.position, 'your')
+    ctx.deps.places.save(Place(name=name, x=pos.x, y=pos.y, z=pos.z, dimension=state.dimension))
+    return f'Saved "{name}" at {world.format_position(pos)} in {world.describe_dimension(state.dimension)} ({whose} position).'
+
+
+@agent.tool
+def go_to_place(ctx: RunContext[ChatDeps], name: str) -> str:
+    """Walk to a saved place and wait there."""
+    place = ctx.deps.places.get(name)
+    if not place:
+        known = ', '.join(p.name for p in ctx.deps.places.all()) or 'none yet'
+        return f'No saved place called "{name}". Saved places: {known}.'
+    if ctx.deps.state and place.dimension != ctx.deps.state.dimension:
+        here = world.describe_dimension(ctx.deps.state.dimension)
+        return f'{place.name} is in {world.describe_dimension(place.dimension)}, but you are in {here}.'
+    ctx.deps.actions.append(BotAction(type='goto', x=place.x, y=place.y, z=place.z, label=place.name))
+    return f'Walking to {place.name} at ({place.x}, {place.y}, {place.z}).'
+
+
+@agent.tool
+def forget_place(ctx: RunContext[ChatDeps], name: str) -> str:
+    """Delete a saved place."""
+    if ctx.deps.places.remove(name):
+        return f'Forgot "{name}".'
+    return f'No saved place called "{name}".'
 
 
 NO_STATE = "You can't sense the world right now."
@@ -59,6 +113,12 @@ NO_STATE = "You can't sense the world right now."
 def status(ctx: RunContext[ChatDeps]) -> str:
     """Health, hunger, position, time and weather, so every reply can take them into account."""
     return world.describe_status(ctx.deps.state) if ctx.deps.state else NO_STATE
+
+
+@agent.instructions
+def saved_places(ctx: RunContext[ChatDeps]) -> str:
+    """Saved place names, so the agent knows what "go home" refers to without a lookup."""
+    return world.describe_places(ctx.deps.places.all(), ctx.deps.state)
 
 
 @agent.tool

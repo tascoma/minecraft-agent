@@ -21,7 +21,7 @@ flowchart TB
     subgraph BACKEND["backend/ (Python + FastAPI) on the Mac"]
         route["POST /chat"]
         agent["Pydantic AI agent"]
-        tools["Tools<br/>follow_player, stay_here"]
+        tools["Tools<br/>movement, lookups, places"]
         skills["Skills<br/>skills/*/SKILL.md"]
     end
 
@@ -189,6 +189,8 @@ bot/
   index.js                   connection, reconnect, logging, follow reflex, action executor
   state.js                   state snapshot sent with each chat
   alerts.js                  chat warnings: low health, creeper nearby, nightfall
+  movements.js               pathfinder rules: no digging, safe drops, doors and gates
+  patches/                   fixes to npm packages, applied by patch-package on npm install
 backend/app/
   main.py                    FastAPI app, sets up logging at startup
   core/config.py             settings from .env (model, API key, ports)
@@ -197,6 +199,8 @@ backend/app/
   agents/agent.py            the agent, ChatDeps, and its tools
   routes/chat.py             POST /chat: runs the agent, logs, returns reply + actions
   services/world.py          turns the bot's state snapshot into text for the agent
+  services/places.py         named places, saved to backend/data/places.json
+backend/data/                things the agent remembers between runs (gitignored)
   schema/chat.py             ChatRequest, ChatResponse, BotAction
 skills/
   <name>/SKILL.md            playbooks the agent loads on demand
@@ -274,5 +278,16 @@ flowchart LR
 1. **Task queue in the bot.** "Mine 20 cobblestone" takes minutes. Actions become tasks with an id, progress, cancel, and a result. `stop` cancels the current task.
 2. **State snapshot** ✅. Each request includes health, hunger, position, time, inventory and nearby points of interest, so the agent decides with real information instead of guessing.
 3. **Events endpoint.** The bot calls `POST /events` when something needs a decision (a task finished, it's under attack). Events cost tokens, so the bot handles anything a reflex can, and rate-limits the rest.
-4. **Memory.** Waypoints, chest contents and notes about the player, stored by the backend so they survive restarts.
+4. **Memory.** Named places are done (`services/places.py`). Still to come: chest contents and notes about the player, stored by the backend so they survive restarts.
 5. **Tool groups.** As tools multiply, group them (movement, gathering, crafting, combat) into toolsets or capabilities, so the agent's tool list stays readable and each group can be tested on its own.
+
+---
+
+## 7. Patched dependencies
+
+`mineflayer-pathfinder` 2.4.5 has door support, but it's off by default and doesn't work properly:
+
+- It only opens fence gates, and treats every door, open or closed, as a wall. `bot/movements.js` fixes this by checking each door's and gate's actual state.
+- After opening a gate or door, it stays in "placing a block" mode. If the bot carries dirt or cobblestone, it then throws on every tick. `bot/patches/mineflayer-pathfinder+2.4.5.patch` fixes that, and `patch-package` reapplies it on every `npm install`.
+
+If you upgrade `mineflayer-pathfinder`, check whether the patch is still needed. `npm install` fails loudly if it no longer applies.
