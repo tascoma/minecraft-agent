@@ -65,11 +65,11 @@ class ChatRequest(BaseModel):
 class BotAction(BaseModel):
     """Something the bot should do in the world besides chatting.
 
-    follow/come: `username` is the player. goto: `x`, `z`, optional `y`, and an optional `label` the bot
+    follow/come/teleport: `username` is the player. goto: `x`, `z`, optional `y`, and an optional `label` the bot
     uses when it reports arriving ("Made it to home.").
     """
 
-    type: Literal['follow', 'stay', 'come', 'goto']
+    type: Literal['follow', 'stay', 'come', 'goto', 'teleport']
     username: str | None = None
     x: int | None = None
     y: int | None = None

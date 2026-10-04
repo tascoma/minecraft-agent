@@ -33,8 +33,8 @@ agent = Agent(
         'You are a friendly Minecraft companion who plays alongside the user in their world. '
         'Your replies are sent as in-game chat, so keep them short: one or two sentences, plain text, no Markdown. '
         'You follow the player around by default. Use your movement tools when the player asks you to follow, stop, come over, '
-        'or go somewhere. Walking takes time: the bot announces in chat when it arrives or gets stuck, '
-        'so say you are on your way, never that you have arrived. '
+        'or go somewhere. Moves happen after your reply and the bot announces in chat whether they worked, '
+        'so say you are on your way, never that you have arrived or teleported. '
         'Use your lookup tools to check your inventory and surroundings before answering questions about them; never guess.'
     ),
     # Skills reads SKILL.md files through its own workspace, so the agent gets no file tools.
@@ -61,6 +61,16 @@ def come_here(ctx: RunContext[ChatDeps]) -> str:
     """Walk over to the player who is talking to you once, then wait next to them (not follow)."""
     ctx.deps.actions.append(BotAction(type='come', username=ctx.deps.username))
     return f'Walking over to {ctx.deps.username}.'
+
+
+@agent.tool
+def teleport_to_player(ctx: RunContext[ChatDeps]) -> str:
+    """Teleport instantly next to the player who is talking to you, using /tp.
+
+    Only when they ask you to teleport. Needs commands allowed in the world; the bot says if it fails.
+    """
+    ctx.deps.actions.append(BotAction(type='teleport', username=ctx.deps.username))
+    return 'Teleport requested. The bot will say in chat whether it worked, so do not say you have teleported.'
 
 
 @agent.tool

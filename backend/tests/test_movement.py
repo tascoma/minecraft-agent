@@ -11,6 +11,7 @@ from app.agents.agent import (
     save_place,
     saved_places,
     stay_here,
+    teleport_to_player,
 )
 from app.schema.chat import BotAction
 from app.services.places import Place, PlaceStore
@@ -47,11 +48,13 @@ def test_movement_tools_queue_actions(store):
     come_here(c)
     go_to(c, x=10, z=-20)
     go_to(c, x=10, z=-20, y=70)
+    teleport_to_player(c)
     assert c.deps.actions == [
         BotAction(type='stay'),
         BotAction(type='come', username='Steve'),
         BotAction(type='goto', x=10, z=-20),
         BotAction(type='goto', x=10, y=70, z=-20),
+        BotAction(type='teleport', username='Steve'),
     ]
 
 

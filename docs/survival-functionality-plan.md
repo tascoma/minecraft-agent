@@ -53,6 +53,7 @@ The bot does one thing at a time: follow, stand still, or walk somewhere. When i
 | Explore in a direction and report what it finds | Tool | `GoalXZ` + Phase 1 scans; needs bot → backend events | 🔲 |
 | Swim, climb ladders, open doors and gates | Reflex | `bot/movements.js` (wooden doors and gates; iron ones need redstone) | ✅ |
 | Avoid lava, cliffs and deep water | Reflex | `bot/movements.js`: lava avoided, `maxDropDown` 3, `liquidCost` 5 | ✅ |
+| Teleport to the player ("tp to me") | Tool | `teleport_to_player`, `/tp`; needs Allow Cheats on | ✅ |
 | Build up or bridge across gaps when stuck | Reflex | `Movements.scafoldingBlocks`; waits for Phase 4 so it has blocks | 🔲 |
 | Stop whatever it's doing ("stop") | Tool | `stay_here` | ✅ |
 

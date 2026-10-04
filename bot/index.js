@@ -16,6 +16,8 @@ const backendUrl = process.env.BACKEND_URL ?? 'http://127.0.0.1:8000'
 const followRange = 3
 // How close the bot gets when called over with "come here", in blocks.
 const comeRange = 2
+// How long to wait for the server to move the bot after /tp before assuming it failed.
+const teleportTimeoutMs = 3000
 // Wait before reconnecting after a disconnect, doubling up to the max while the world stays closed.
 const reconnectBaseMs = 5_000
 const reconnectMaxMs = 60_000
@@ -120,6 +122,34 @@ function come(name) {
   walkTo(new goals.GoalNear(x, y, z, comeRange), { place: name, arrived: "I'm here." })
 }
 
+// Teleport next to a player with /tp. Needs commands allowed: "Allow Cheats" when opening to LAN,
+// or op on a server. Keeps following if it was following; otherwise cancels any trip and waits there.
+function teleport(name) {
+  if (!followTarget) bot.pathfinder.setGoal(null)
+  let serverReply = null
+  const onMessage = (text, position) => {
+    if (position === 'system' || position === 'game_info') serverReply ??= text
+  }
+  const onMoved = () => finish(true)
+  const timer = setTimeout(() => finish(false), teleportTimeoutMs)
+  function finish(moved) {
+    clearTimeout(timer)
+    bot.off('forcedMove', onMoved)
+    bot.off('messagestr', onMessage)
+    if (moved) {
+      log('INFO', `teleported to ${name}`)
+      say("I'm here.")
+      return
+    }
+    log('WARN', `teleport to ${name} failed; server said: ${serverReply ?? 'nothing'}`)
+    say("I couldn't teleport. Commands need to be allowed (Open to LAN, Allow Cheats: ON).")
+  }
+  bot.on('forcedMove', onMoved)
+  bot.on('messagestr', onMessage)
+  log('INFO', `teleporting to ${name}`)
+  bot.chat(`/tp ${name}`)
+}
+
 function goTo({ x, y, z, label }) {
   const place = label ?? (y == null ? `(${x}, ${z})` : `(${x}, ${y}, ${z})`)
   // Without a height, any block in that column will do.
@@ -133,6 +163,7 @@ function runAction(action) {
     else if (action.type === 'stay') stay()
     else if (action.type === 'come') come(action.username)
     else if (action.type === 'goto') goTo(action)
+    else if (action.type === 'teleport') teleport(action.username)
     else {
       log('WARN', `unknown action: ${JSON.stringify(action)}`)
       reportError(`I don't know how to do "${action.type}" yet. Is the bot out of date?`)
