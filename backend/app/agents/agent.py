@@ -241,8 +241,8 @@ def shear_sheep(ctx: RunContext[ChatDeps], count: int = 64) -> str:
 def build_shelter(ctx: RunContext[ChatDeps], kind: str = 'shelter', material: str | None = None, place: str | None = None) -> str:
     """Build a small building with walls, a roof and a door facing the player.
 
-    kind "shelter" is a quick 3x3 room with 2-high walls (about 34 blocks), good for getting through a
-    night; "hut" is a 5x5 room with 3-high walls (about 75 blocks). Built where the player is standing,
+    kind "shelter" is a quick 3x3 room with 2-high walls (55 blocks), good for getting through a
+    night; "hut" is a 5x5 room with 3-high walls (119 blocks). Built where the player is standing,
     or at a saved place. Material is what you have most of unless the player names one ("wood", "cobblestone",
     "dirt"); you gather or craft more if short.
     """

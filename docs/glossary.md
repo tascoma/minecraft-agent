@@ -150,7 +150,7 @@ The words this project uses for its own building blocks.
 
 **.env**: The local settings file at the repo root: API key, model, Minecraft host and port, and optionally a world name (`MC_WORLD`). Ignored by git. `.env.example` is the committed template.
 
-**Endpoint**: A URL the backend answers. `POST /chat` takes a chat message and returns a reply and actions; `GET /health` checks the backend is up.
+**Endpoint**: A URL the backend answers. `POST /chat` takes a chat message and returns a reply and actions; `GET /places` and `GET /chests` give the bot a world's saved places and remembered chests when it joins; `POST /chests` and `DELETE /chests` keep the chest memory up to date; `GET /health` checks the backend is up.
 
 **FastAPI**: The Python web framework the backend uses to serve `/chat`.
 
@@ -161,7 +161,7 @@ The words this project uses for its own building blocks.
 - `bot.log`: bot actions, such as joining, chat heard and said, following or staying, reflexes, jobs (including each block dug), deaths and errors.
 - `bot-console.log`: the bot's raw console output, including library warnings.
 
-**In-game check**: A script in `bot/scripts/` that joins as a second player, ClaudeTester, sets up a situation with commands, and checks what the bot does. Needs a test world with cheats on.
+**In-game check**: A script in `bot/scripts/` that joins as a second player, ClaudeTester, sets up a situation with commands, and checks what the bot does. Needs cheats on. Checks tag the mobs they summon and only kill those, take back the tools they give, and (farming, building, storage) record and restore every block of the patch they test on. Shared helpers are in `bot/scripts/tester.js`.
 
 **Node / npm**: Node runs the bot's JavaScript; npm installs its packages (`cd bot && npm install`, then `npm start`, or `npm test` for the unit tests).
 
@@ -221,6 +221,6 @@ From [architecture.md](architecture.md), section 6. These aren't built yet, or o
 
 **Event**: A message the bot sends the backend when something needs a decision without the player chatting (a task finished, it's under attack). Each event costs tokens, so events are rate-limited.
 
-**Memory**: Information the backend saves across restarts. Named places exist; chest contents and notes about the player are still planned.
+**Memory**: Information the backend saves across restarts, per world. Named places and chest contents exist; notes about the player are still planned.
 
 **Task queue**: Several jobs lined up to run in order ("get logs, then cobblestone"). Today only one job runs at a time.

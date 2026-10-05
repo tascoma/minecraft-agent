@@ -57,7 +57,7 @@ The bot does one thing at a time: follow, stand still, or walk somewhere. When i
 | Build up or bridge across gaps when stuck | Reflex | `Movements.scafoldingBlocks` with dirt or cobblestone; during gathering jobs only, never while following and never in protected areas | ✅ |
 | Stop whatever it's doing ("stop") | Tool | `stay_here` | ✅ |
 
-## Phase 3: Staying alive (reflexes)
+## Phase 3: Staying alive (reflexes) ✅
 
 These run automatically, without being asked and without any tokens. They live in `bot/survival.js`. Any command from the player cancels a running reflex.
 
@@ -68,7 +68,7 @@ Tested in game with a second player running commands (`/give`, `/damage`, `/summ
 | Eat when hungry; top up to 18 when hurt so it heals; rotten flesh only when starving | Reflex | `mineflayer-auto-eat` | ✅ |
 | Ask the player for food when starving with nothing to eat | Reflex → chat | `health` event | ✅ |
 | Equip the best armor it has, whether picked up or put straight in its inventory | Reflex | `mineflayer-armor-manager` + inventory watch | ✅ |
-| Use the right tool for each block | Reflex | Moved to Phase 4: the bot doesn't dig yet | 🔲 |
+| Use the right tool for each block | Reflex | `mineflayer-tool`, in Phase 4 gathering | ✅ |
 | Back off when hurt and a hostile mob is near: run to the player, or away from the mob | Reflex | pathfinder `GoalFollow` / `GoalInvert` | ✅ |
 | Get out of lava, run to water when on fire, swim up when out of air | Reflex | `isInLava`, entity fire flag, `oxygenLevel` | ✅ |
 | Sleep when the player sleeps (on LAN, every player must sleep for the night to skip) | Reflex | `entitySleep` event, `bot.sleep` | ✅ |
@@ -110,7 +110,7 @@ One tool, `make_item(item, count)`, runs a job (`bot/crafting.js`) that works ou
 
 Tested in game (`npm run check:crafting`): a stone pickaxe from an empty inventory, torches, and iron ingots with a furnace it made and placed.
 
-## Phase 6: Combat and defense
+## Phase 6: Combat and defense ✅
 
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
@@ -122,7 +122,7 @@ Tested in game (`npm run check:crafting`): a stone pickaxe from an empty invento
 | Use a bow and shield | Reflex | `bot/archery.js` (aim, line of fire), `bot.activateItem` | ✅ |
 | Never hit the player, pets or villagers | Reflex | target filter (`canAttack` in `bot/combat.js`) | ✅ |
 
-## Phase 7: Food and farming
+## Phase 7: Food and farming ✅
 
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
@@ -134,7 +134,7 @@ Tested in game (`npm run check:crafting`): a stone pickaxe from an empty invento
 | Fish | Tool | `go_fishing` (needs a rod or string) | ✅ |
 | Shear sheep for wool | Tool | `shear_sheep` (makes shears from iron) | ✅ |
 
-## Phase 8: Building
+## Phase 8: Building ✅
 
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
@@ -145,7 +145,7 @@ Tested in game (`npm run check:crafting`): a stone pickaxe from an empty invento
 | Bridge across a gap or pillar up | Tool | `bridge`, `pillar_up` | ✅ |
 | Place and fill a bed, chest, crafting table or furnace at the base | Tool | `place_block` with a saved place ("put a chest at home") | ✅ *Placing only; filling chests is Phase 9* |
 
-## Phase 9: Base and storage
+## Phase 9: Base and storage ✅
 
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
@@ -190,8 +190,8 @@ Phases 4 onward need these before they work well:
 1. **Task system.** *Partly done.* Jobs like "get 20 cobblestone" run one at a time, can be cancelled, and report progress and results in chat (`bot/tasks.js`). Still to come: a queue of several jobs, and telling the agent when a job ends (needs bot → backend events).
 2. **Bot → backend events.** The bot reports things that happen (task finished, under attack, low health) so the agent can react, not only when the player chats. Each event costs tokens, so they must be rate-limited and only sent when the agent needs to decide something.
 3. **Persistent memory.** *Partly done.* Named places and chest contents are saved per world (`backend/data/worlds/<world id>/`), keyed by the world id the bot sends. Player notes should go in the same folder.
-4. **Safety rules.** Never attack players, never dig inside protected areas (done), never take from the player's chests unless asked. Enforced in the bot, not left to the model.
-5. **Tests.** *Done for Phases 1–4:* backend unit tests (`uv run pytest`), bot unit tests (`npm test`), and in-game checks with a second player (`npm run check:survival`, `npm run check:gathering`). Each new phase should add to all three.
+4. **Safety rules.** *Done:* never attack players, villagers, golems or pets, or shoot with one in the line of fire; never dig or build by itself inside protected areas; never break blocks a player placed; only take from chests when asked. Enforced in the bot, not left to the model.
+5. **Tests.** *Done for Phases 1–9:* backend unit tests (`uv run pytest`), bot unit tests (`npm test`), and an in-game check per phase with a second player (`npm run check:survival`, `check:gathering`, `check:crafting`, `check:combat`, `check:farming`, `check:building`, `check:storage`). Each new phase should add to all three.
 
 ## Suggested order
 
