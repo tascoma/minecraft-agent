@@ -20,7 +20,7 @@ def test_status_line():
     status = world.describe_status(make_state())
     assert status == (
         'Your status: health 17.5/20 (healthy), food 14/20 (a bit hungry, not healing), at (10, 64, -3) in the Overworld, '
-        'day, about 6 min until night, clear, holding stone_pickaxe, tools: none.'
+        'day, about 6 min until night, clear, holding stone_pickaxe, tools: none. You are not following anyone.'
     )
 
 
@@ -101,6 +101,11 @@ def test_tools_in_status():
 def test_status_names_the_world():
     assert 'World id: seed-ab12 ' in world.describe_status(make_state(world_id='seed-ab12'))
     assert 'World id' not in world.describe_status(make_state())
+
+
+def test_status_says_whether_it_is_following():
+    assert 'You are following Steve.' in world.describe_status(make_state(following='Steve'))
+    assert 'You are not following anyone.' in world.describe_status(make_state())
 
 
 def test_status_says_what_it_is_fighting():

@@ -74,6 +74,8 @@ class BotState(BaseModel):
     task: Task | None = None
     # The mob the bot is fighting, like 'zombie'.
     fighting: str | None = None
+    # Who the bot is following; None when staying put. Optional so older bots still work.
+    following: str | None = None
 
 
 class ChatRequest(BaseModel):
@@ -102,11 +104,14 @@ class BotAction(BaseModel):
     fish, shear: `count`. build: `target` ('shelter' or 'hut'), optional `item` (material), optional `x`/`y`/`z`/`label`.
     light: `count` (radius). place: `item`, optional `x`/`y`/`z`/`label`. pillar: `count`. bridge: `target`
     (a direction, or None for where the player faces) and `count`. build, place and bridge also carry `username`.
+    store, take: `item` (None or 'everything' to store all but tools, food and armor), `count`, optional
+    `x`/`y`/`z`/`label` for where. inspect, sort: optional `x`/`y`/`z`/`label`.
     """
 
     type: Literal['follow', 'stay', 'come', 'goto', 'teleport', 'recover', 'collect', 'give', 'make', 'attack', 'guard',
         'hunt', 'harvest', 'plant', 'breed', 'fish', 'shear',
         'build', 'light', 'place', 'pillar', 'bridge',
+        'store', 'take', 'inspect', 'sort',
     ]
     username: str | None = None
     x: int | None = None

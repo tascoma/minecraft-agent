@@ -36,12 +36,13 @@ joinTester(async ({ client: t, companion: bot, give, say, command, waitFor, chec
   const botAt = () => t.players[bot].entity.position
 
   try {
+    // Stop it following its player first, or it walks back to them as soon as it's teleported, and
+    // again between jobs.
+    say('stop following and stay where you are')
+    await waitFor(/./, 15000)
     command(`/tp ${bot} ${center.x + 0.5} ${center.y} ${center.z + 0.5}`)
     command(`/tp ClaudeTester ${at(center.offset(0, 8, 0))}`)
-    // Otherwise it goes back to following its player between jobs and builds over there.
-    say('stay here')
-    await waitFor(/./, 15000)
-    await sleep(1000)
+    await sleep(1500)
 
     // One block, at coordinates.
     give('chest')

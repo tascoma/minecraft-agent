@@ -217,6 +217,7 @@ backend/app/
   routes/chat.py             POST /chat: runs the agent, logs, returns reply + actions
   services/world.py          turns the bot's state snapshot into text for the agent
   services/places.py         named places, saved per world to backend/data/worlds/<id>/places.json
+  services/chests.py         chest contents, saved per world to backend/data/worlds/<id>/chests.json
   services/memory.py         each player's recent exchanges, in memory only
 backend/data/                things the agent remembers between runs (gitignored)
   schema/chat.py             ChatRequest, ChatResponse, BotAction
@@ -230,7 +231,7 @@ backend/logs/
 
 ### The bot ↔ backend contract
 
-Everything between the two processes goes through `POST /chat`:
+Chat goes through `POST /chat` (below). Besides that, the bot fetches saved places (`GET /places`) and remembered chests (`GET /chests`) when it joins, and reports chests as it opens them (`POST /chests`, `DELETE /chests`).
 
 ```jsonc
 // request (bot → backend); state is built by bot/state.js
@@ -300,7 +301,7 @@ flowchart LR
 1. **Task queue in the bot.** *Partly done:* one job at a time with progress, cancel and a result in chat (`bot/tasks.js`). A queue of several jobs is still to come.
 2. **State snapshot** ✅. Each request includes health, hunger, position, time, inventory and nearby points of interest, so the agent decides with real information instead of guessing.
 3. **Events endpoint.** The bot calls `POST /events` when something needs a decision (a task finished, it's under attack). Events cost tokens, so the bot handles anything a reflex can, and rate-limits the rest.
-4. **Memory.** Named places are done (`services/places.py`); the bot also remembers where it last died, in memory only. Still to come: chest contents and notes about the player, stored by the backend so they survive restarts.
+4. **Memory.** Named places and chest contents are done (`services/places.py`, `services/chests.py`); the bot reports a chest each time it opens one (`POST /chests`), loads them on join (`GET /chests`) and reports chests it finds gone (`DELETE /chests`). It also remembers where it last died, in memory only. Still to come: notes about the player.
 5. **Tool groups.** As tools multiply, group them (movement, gathering, crafting, combat) into toolsets or capabilities, so the agent's tool list stays readable and each group can be tested on its own.
 
 ---

@@ -10,6 +10,7 @@ import { installFarming } from './farming.js'
 import { installGathering } from './gathering.js'
 import { CompanionMovements, setProtectedSpots } from './movements.js'
 import { snapshot } from './state.js'
+import { installStorage, setChestMemory } from './storage.js'
 import { installSurvival } from './survival.js'
 import { cancelTask, currentTask } from './tasks.js'
 import { currentWorldId, setWorldFromLogin } from './world.js'
@@ -109,6 +110,37 @@ async function loadProtectedSpots() {
   }
 }
 
+// The chests the bot remembers in this world, so it knows where things are from the start.
+async function loadChests() {
+  try {
+    const res = await fetch(`${backendUrl}/chests${worldQuery()}`, { signal: AbortSignal.timeout(5000) })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const chests = await res.json()
+    setChestMemory(chests)
+    log('INFO', `remembering ${chests.length} chest(s)`)
+  } catch (err) {
+    log('WARN', `couldn't load remembered chests from the backend (${describeFetchError(err)})`)
+  }
+}
+
+// Tell the backend what's in a chest the bot just opened. Fire and forget: the bot's own memory is
+// already up to date, and a lost update only means the agent's answer is a little stale.
+function reportChest(chest) {
+  fetch(`${backendUrl}/chests${worldQuery()}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(chest),
+    signal: AbortSignal.timeout(5000),
+  }).catch((err) => log('WARN', `couldn't report a chest to the backend (${describeFetchError(err)})`))
+}
+
+// Tell the backend a chest it remembers is gone.
+function forgetChest({ x, y, z, dimension }) {
+  const query = new URLSearchParams({ x, y, z, dimension, ...(currentWorldId() ? { world: currentWorldId() } : {}) })
+  fetch(`${backendUrl}/chests?${query}`, { method: 'DELETE', signal: AbortSignal.timeout(5000) })
+    .catch((err) => log('WARN', `couldn't tell the backend a chest is gone (${describeFetchError(err)})`))
+}
+
 // Chat-ready message for a failed backend request.
 async function backendErrorMessage(err, res) {
   if (err.name === 'TimeoutError') return 'my backend took too long to answer. Try again?'
@@ -133,6 +165,7 @@ let crafting = null
 let combat = null
 let farming = null
 let building = null
+let storage = null
 
 function updateFollowGoal() {
   // A reflex (backing off, sleeping, fetching items) or a job (gathering) is driving; it resumes
@@ -254,6 +287,10 @@ function runAction(action) {
     else if (action.type === 'place') building.place(action)
     else if (action.type === 'pillar') building.pillar(action)
     else if (action.type === 'bridge') building.bridge(action)
+    else if (action.type === 'store') storage.store(action)
+    else if (action.type === 'take') storage.take(action)
+    else if (action.type === 'inspect') storage.inspect(action)
+    else if (action.type === 'sort') storage.sort(action)
     else {
       log('WARN', `unknown action: ${JSON.stringify(action)}`)
       reportError(`I don't know how to do "${action.type}" yet. Is the bot out of date?`)
@@ -267,7 +304,7 @@ function runAction(action) {
 // Builds the state snapshot, or null if that fails, so a scan bug doesn't stop the bot from chatting.
 function safeSnapshot(speaker) {
   try {
-    return snapshot(bot, speaker)
+    return snapshot(bot, speaker, { following: followTarget })
   } catch (err) {
     log('ERROR', `state snapshot failed: ${err.stack ?? err}`)
     return null
@@ -288,6 +325,7 @@ function connect() {
     reconnectDelay = reconnectBaseMs
     bot.pathfinder.setMovements(new CompanionMovements(bot))
     loadProtectedSpots()
+    loadChests()
     say('Hi! I am here.')
     // After a reconnect, keep doing what we were doing: follow the same player, or stay put.
     if (followTarget) follow(followTarget)
@@ -302,6 +340,8 @@ function connect() {
     crafting = installCrafting(bot, { say, log, gathering, resume })
     farming = installFarming(bot, { say, log, survival, combat, gathering, crafting, resume })
     building = installBuilding(bot, { say, log, survival, crafting, resume })
+    storage = installStorage(bot, { say, log, survival, resume, reportChest, forgetChest })
+    gathering.setDropOff(storage.dropOff)
   })
 
   bot.on('entitySpawn', (entity) => {

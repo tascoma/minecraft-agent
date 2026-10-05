@@ -150,11 +150,11 @@ Tested in game (`npm run check:crafting`): a stone pickaxe from an empty invento
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
 | Remember where home is | Memory | saved places, per world | ✅ |
-| Store items in chests ("put away the cobblestone") | Tool | `bot.openContainer` | 🔲 |
-| Take items from chests ("grab iron from the chest") | Tool | `bot.openContainer` | 🔲 |
-| Keep a record of what's in each chest | Memory | container snapshots | 🔲 |
-| Sort chests by item type | Tool + skill | container moves | 🔲 |
-| Drop off a full inventory at home automatically | Reflex | inventory-full check | 🔲 |
+| Store items in chests ("put away the cobblestone") | Tool | `store_items` ("everything" keeps tools, armor, food, torches) | ✅ |
+| Take items from chests ("grab iron from the chest") | Tool | `take_items` (remembered chests first) | ✅ |
+| Keep a record of what's in each chest | Memory | `services/chests.py`, per world; `find_item`, `check_chests`; forgets chests that are gone | ✅ |
+| Sort chests by item type | Tool | `sort_chests`: each kind to the chest with the most of it | ✅ |
+| Drop off a full inventory at home automatically | Reflex | chests near a saved place; also mid-gathering | ✅ *Not tested in-game* |
 
 ## Phase 10: Progression goals
 
@@ -189,7 +189,7 @@ Phases 4 onward need these before they work well:
 
 1. **Task system.** *Partly done.* Jobs like "get 20 cobblestone" run one at a time, can be cancelled, and report progress and results in chat (`bot/tasks.js`). Still to come: a queue of several jobs, and telling the agent when a job ends (needs bot → backend events).
 2. **Bot → backend events.** The bot reports things that happen (task finished, under attack, low health) so the agent can react, not only when the player chats. Each event costs tokens, so they must be rate-limited and only sent when the agent needs to decide something.
-3. **Persistent memory.** *Partly done.* Named places are saved per world (`backend/data/worlds/<world id>/`), keyed by the world id the bot sends. Chest contents and player notes should go in the same per-world folder.
+3. **Persistent memory.** *Partly done.* Named places and chest contents are saved per world (`backend/data/worlds/<world id>/`), keyed by the world id the bot sends. Player notes should go in the same folder.
 4. **Safety rules.** Never attack players, never dig inside protected areas (done), never take from the player's chests unless asked. Enforced in the bot, not left to the model.
 5. **Tests.** *Done for Phases 1–4:* backend unit tests (`uv run pytest`), bot unit tests (`npm test`), and in-game checks with a second player (`npm run check:survival`, `npm run check:gathering`). Each new phase should add to all three.
 
@@ -198,5 +198,5 @@ Phases 4 onward need these before they work well:
 1. ~~Phase 1 (world awareness) and the task system.~~ Done; the task system runs one job at a time.
 2. ~~Phase 3 (staying alive)~~ done. ~~Phase 6 reflexes (fighting back)~~ done, using a small attack loop instead of `mineflayer-pvp` (unmaintained since 2021). Guarding, the bow and the shield are done too, so Phase 6 is complete.
 3. ~~Phases 4 and 5 (gathering, crafting)~~ done. The bot can now go from nothing to stone tools, torches and iron ingots by itself.
-4. ~~Phases 7–8 (food and farming, building)~~ done. Phase 9 (base and storage) is next.
+4. ~~Phases 7–9 (food and farming, building, base and storage)~~ done.
 5. Phases 10–11 (long-term goals and companionship).

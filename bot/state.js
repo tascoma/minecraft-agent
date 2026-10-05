@@ -70,7 +70,7 @@ function deathSnapshot() {
   return { position: point(death.position), dimension: death.dimension, seconds_ago: death.secondsAgo }
 }
 
-export function snapshot(bot, speaker) {
+export function snapshot(bot, speaker, { following = null } = {}) {
   const me = bot.entity.position
   const speakerEntity = bot.players[speaker]?.entity
   return {
@@ -94,5 +94,7 @@ export function snapshot(bot, speaker) {
     task: currentTask(),
     // The mob the bot is fighting, like "zombie"; null when not fighting.
     fighting: currentFight(),
+    // Who the bot is following, or null when it's staying put (or walking somewhere).
+    following,
   }
 }

@@ -90,6 +90,7 @@ def describe_status(state: BotState) -> str:
         f'{describe_time(state.time_of_day)}, {describe_weather(state)}, holding {held}, '
         f'tools: {describe_tools(state)}.'
     )
+    status += f' You are following {state.following}.' if state.following else ' You are not following anyone.'
     if state.fighting:
         status += f' You are fighting a {state.fighting.replace("_", " ")}.'
     if task := state.task:

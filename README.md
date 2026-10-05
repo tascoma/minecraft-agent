@@ -60,6 +60,7 @@ npm run check:gathering    # logs, pickaxe needed, progress, stop, giving items
 npm run check:crafting     # stone pickaxe from nothing, torches, iron ingots with a furnace
 npm run check:combat       # fights back, defends you, backs away from creepers, kills on request, spares villagers, bow, shield, guarding (costs you half a heart)
 npm run check:building     # chest, shelter with door, torches, pillar, bridge (on levelled ground; puts it back)
+npm run check:storage      # look in, find, sort, put away, take out, forget broken chests (on levelled ground; puts it back)
 npm run check:farming      # hunt, cook, breed, shear, harvest, plant by water, fish (on open grass; puts the ground back)
 ```
 
@@ -76,5 +77,5 @@ The full list is in [docs/survival-functionality-plan.md](docs/survival-function
 - [x] Combat: fight back, defend you, back away from creepers, attack on request, never hit players, villagers or pets ; guard a place, shoot with a bow, block arrows with a shield (Phase 6)
 - [x] Food and farming: hunt, cook, harvest and replant, plant a field by water, breed, fish, shear (Phase 7)
 - [x] Building: place blocks, light an area, emergency shelter or hut with a door, bridge, pillar up (Phase 8)
-- [ ] Base and storage (Phase 9)
+- [x] Base and storage: put away, take out, remember and sort chests, drop off a full inventory at the base (Phase 9)
 - [ ] Long-term goals and companionship (Phases 10–11)

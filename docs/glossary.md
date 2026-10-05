@@ -16,13 +16,13 @@ The words this project uses for its own building blocks.
 
 **Action executor**: The part of `bot/index.js` (`runAction`) that takes actions from the backend and performs them with Mineflayer. Logs a warning for any action type it doesn't recognize.
 
-**Action tool**: A tool that changes the world (`follow_player`, `stay_here`, `come_here`, `go_to`, `go_to_place`, `teleport_to_player`, `recover_items`, `collect`, `give_items`, `make_item`, `attack`, `guard_area`, `hunt`, `harvest_crops`, `plant_crops`, `breed_animals`, `go_fishing`, `shear_sheep`, `build_shelter`, `place_block`, `light_up_area`, `pillar_up`, `bridge`). It doesn't touch Minecraft itself; it adds a `BotAction` for the bot to carry out. Compare *query tool*.
+**Action tool**: A tool that changes the world (`follow_player`, `stay_here`, `come_here`, `go_to`, `go_to_place`, `teleport_to_player`, `recover_items`, `collect`, `give_items`, `make_item`, `attack`, `guard_area`, `hunt`, `harvest_crops`, `plant_crops`, `breed_animals`, `go_fishing`, `shear_sheep`, `build_shelter`, `place_block`, `light_up_area`, `pillar_up`, `bridge`, `store_items`, `take_items`, `check_chests`, `sort_chests`). It doesn't touch Minecraft itself; it adds a `BotAction` for the bot to carry out. Compare *query tool*.
 
 **Backend**: The Python process in `backend/`. The bot's "brain": it receives chat, runs the agent, and replies. It's the only part that costs tokens.
 
 **Bot**: The Node process in `bot/`. The bot's "body": a Minecraft player controlled by code, using Mineflayer. It moves, senses and acts, and never costs tokens. Also refers to the in-game player itself, named **Claude**.
 
-**BotAction**: The data shape of an action, defined in `backend/app/schema/chat.py`: a `type` (`follow`, `stay`, `come`, `goto`, `teleport`, `recover`, `collect`, `give`, `make`, `attack`, `guard`, `hunt`, `harvest`, `plant`, `breed`, `fish`, `shear`, `build`, `light`, `place`, `pillar` or `bridge`), plus `username` for actions aimed at a player, `x`/`y`/`z`/`label` for `goto` and `guard`, `item`/`count` for gathering and making, `target` (a mob, animal or crop) for `attack` and the farming jobs, and `count` for how many.
+**BotAction**: The data shape of an action, defined in `backend/app/schema/chat.py`: a `type` (`follow`, `stay`, `come`, `goto`, `teleport`, `recover`, `collect`, `give`, `make`, `attack`, `guard`, `hunt`, `harvest`, `plant`, `breed`, `fish`, `shear`, `build`, `light`, `place`, `pillar`, `bridge`, `store`, `take`, `inspect` or `sort`), plus `username` for actions aimed at a player, `x`/`y`/`z`/`label` for `goto` and `guard`, `item`/`count` for gathering and making, `target` (a mob, animal or crop) for `attack` and the farming jobs, and `count` for how many.
 
 **ChatDeps**: The per-request deps object for the agent, in `backend/app/agents/agent.py`. Holds who is talking, the bot's state snapshot, the saved places, and the list of actions tools have recorded during the run.
 
@@ -38,6 +38,10 @@ The words this project uses for its own building blocks.
 
 **Building jobs**: Placing a block, lighting an area, building a shelter or hut, bridging and pillaring (`bot/building.js`). They share one placer that builds bottom-up against something solid, steps out of the way of its own blocks, and gathers or crafts materials it's short of.
 
+**Chest memory**: What's in every chest the bot has opened, per world, in `backend/data/worlds/<world id>/chests.json` (`services/chests.py`). The bot reports a chest each time it opens one and forgets ones it finds gone; the agent reads it with `find_item`. Only as fresh as the bot's last look.
+
+**Drop-off**: When the bot's inventory is full, it takes everything but tools, armor, food and torches to a chest near a saved place within 96 blocks, by itself when idle or in the middle of a gathering job (`bot/storage.js`).
+
 **Blueprint**: A small fixed building in `bot/building.js`: "shelter" (3x3 inside, 2-high walls) or "hut" (5x5 inside, 3-high walls), each with a roof and a door facing the player.
 
 **Farming jobs**: Hunting, harvesting, planting, breeding, fishing and shearing (`bot/farming.js`). Each runs as a job, waits out reflexes (a fight, eating) and carries on, and says up front if the inventory is full. Hunting skips babies and leaves the last two adults of a kind so they can still breed.
@@ -50,7 +54,7 @@ The words this project uses for its own building blocks.
 
 **Named place**: A position saved under a name ("home", "the mine") with `save_place`, kept per world in `backend/data/worlds/<world id>/places.json` so it survives restarts. The agent sees every saved name and its distance on each run. Sometimes called a waypoint.
 
-**Query tool**: A tool that reads the world instead of changing it: `check_inventory`, `look_around`, `nearby_entities`, `where_are_we`. It answers from the state snapshot. Compare *action tool*.
+**Query tool**: A tool that reads the world instead of changing it: `check_inventory`, `look_around`, `nearby_entities`, `where_are_we`, `find_item`. It answers from the state snapshot (or, for `find_item`, the chest memory). Compare *action tool*.
 
 **World id**: Which world the bot is in, so places and conversation memory stay separate per world. The bot takes it from the seed hash the server sends on login (`seed-b766…`), or from `MC_WORLD` if set, or the server address as a last resort (`bot/world.js`). Sent in the state snapshot as `world_id`.
 
@@ -58,7 +62,7 @@ The words this project uses for its own building blocks.
 
 **Reflex**: Behavior the bot runs by itself, triggered by game events or timers, with no backend call and no tokens. Following the player is a reflex, and so are the survival reflexes in `bot/survival.js` (eat, armor, back off, escape lava and water, sleep) and the combat reflexes in `bot/combat.js` (fight back, defend the companion, back away from creepers). Used for anything time-critical, frequent, or obvious. A command from the player cancels a running reflex.
 
-**State snapshot**: The bot's current situation, sent with every chat message: world id, health, food, position, dimension, time, weather, inventory, nearby blocks and entities, where the player is, where the bot last died, its current job and what it's fighting. Built by `bot/state.js`, defined as `BotState` in the schema.
+**State snapshot**: The bot's current situation, sent with every chat message: world id, health, food, position, dimension, time, weather, inventory, nearby blocks and entities, where the player is, where the bot last died, its current job, what it's fighting and who it's following. Built by `bot/state.js`, defined as `BotState` in the schema.
 
 **Skill**: A `SKILL.md` playbook under `skills/` describing how to do something multi-step. The agent only sees each skill's name and description until it decides to load one. Skills are knowledge; tools are actions.
 

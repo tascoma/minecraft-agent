@@ -36,6 +36,9 @@ export function setProtectedSpots(spots) {
   protectedSpots = spots ?? []
 }
 
+// The saved places themselves, e.g. for finding the base's chests.
+export const protectedPlaces = () => protectedSpots
+
 // True if a position is within protectedRadius (horizontally) of a saved place in this dimension.
 export function isProtected(pos, dimension) {
   return protectedSpots.some((s) => s.dimension === dimension && Math.hypot(pos.x - s.x, pos.z - s.z) <= protectedRadius)

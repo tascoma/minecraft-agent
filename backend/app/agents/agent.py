@@ -9,6 +9,7 @@ from pydantic_ai_harness.skills import Skills
 from app.core.config import REPO_ROOT, get_settings
 from app.schema.chat import BotAction, BotState
 from app.services import world
+from app.services.chests import ChestStore, distance, get_chest_store
 from app.services.places import Place, PlaceStore, get_place_store
 
 settings = get_settings()
@@ -22,10 +23,15 @@ class ChatDeps:
     actions: list[BotAction] = field(default_factory=list)
     # The saved places of the world the bot is in; picked from the state's world id unless given.
     places: PlaceStore = None  # type: ignore[assignment]
+    # What's in the chests of that world, as of the bot's last look.
+    chests: ChestStore = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
+        world_id = self.state.world_id if self.state else None
         if self.places is None:
-            self.places = get_place_store(self.state.world_id if self.state else None)
+            self.places = get_place_store(world_id)
+        if self.chests is None:
+            self.chests = get_chest_store(world_id)
 
 
 agent = Agent(
@@ -297,6 +303,79 @@ def bridge(ctx: RunContext[ChatDeps], length: int = 10, direction: str | None = 
     return f'Started bridging {length} blocks. The bot will say how far it got.'
 
 
+def _where(ctx: RunContext[ChatDeps], action: BotAction, place: str | None) -> BotAction | str:
+    """Add a saved place's position to an action, or say why not."""
+    if not place:
+        return action
+    saved = _saved_spot(ctx, place)
+    if isinstance(saved, str):
+        return saved
+    return action.model_copy(update={'x': saved.x, 'y': saved.y, 'z': saved.z, 'label': saved.name})
+
+
+@agent.tool
+def store_items(ctx: RunContext[ChatDeps], item: str = 'everything', count: int | None = None, place: str | None = None) -> str:
+    """Put items into chests: one item ("cobblestone"), or "everything" (keeps tools, weapons, armor,
+    food and torches). Uses chests near you, or near a saved place ("put it all away at home").
+    Leave count out for all of it.
+    """
+    action = _where(ctx, BotAction(type='store', item=item, count=count), place)
+    if isinstance(action, str):
+        return action
+    ctx.deps.actions.append(action)
+    return 'Going to put things away. The bot will say what it stored, so do not claim it is done.'
+
+
+@agent.tool
+def take_items(ctx: RunContext[ChatDeps], item: str, count: int | None = None, place: str | None = None) -> str:
+    """Take items out of chests ("grab 10 iron"): tries chests you remember having it first, then
+    opens the chests nearby. Leave count out for all of it. Only when the player asks.
+    """
+    action = _where(ctx, BotAction(type='take', item=item, count=count), place)
+    if isinstance(action, str):
+        return action
+    ctx.deps.actions.append(action)
+    return f'Going to get the {item}. The bot will say what it found, so do not claim it has it.'
+
+
+@agent.tool
+def check_chests(ctx: RunContext[ChatDeps], place: str | None = None) -> str:
+    """Open every chest nearby (or near a saved place) to see and remember what's in them."""
+    action = _where(ctx, BotAction(type='inspect'), place)
+    if isinstance(action, str):
+        return action
+    ctx.deps.actions.append(action)
+    return 'Going to look in the chests. The bot will report what is in them.'
+
+
+@agent.tool
+def sort_chests(ctx: RunContext[ChatDeps], place: str | None = None) -> str:
+    """Tidy the chests nearby (or near a saved place) so each kind of item is in one chest."""
+    action = _where(ctx, BotAction(type='sort'), place)
+    if isinstance(action, str):
+        return action
+    ctx.deps.actions.append(action)
+    return 'Going to sort the chests. The bot will say when it is done.'
+
+
+@agent.tool
+def find_item(ctx: RunContext[ChatDeps], item: str) -> str:
+    """Where an item is stored, from what you saw last time you opened the chests. Use it before
+    answering "where's my iron?" or before deciding whether to take something out.
+    """
+    found = ctx.deps.chests.find(item)
+    if not found:
+        known = len(ctx.deps.chests.all())
+        return f'No {item} in the {known} chests you remember.' if known else 'You have not looked in any chests yet.'
+    here = ctx.deps.state.position if ctx.deps.state else None
+    lines = []
+    for chest, items in found[:5]:
+        what = ', '.join(f'{n} {name}' for name, n in items.items())
+        away = f', {distance(chest, here):.0f} blocks away' if here and ctx.deps.state.dimension == chest.dimension else ''
+        lines.append(f'{what} in the chest at ({chest.x}, {chest.y}, {chest.z}){away}')
+    return '; '.join(lines) + '.'
+
+
 @agent.tool
 def go_to(ctx: RunContext[ChatDeps], x: int, z: int, y: int | None = None) -> str:
     """Walk to coordinates and wait there. Leave y out if the player only gave x and z."""
@@ -347,6 +426,13 @@ NO_STATE = "You can't sense the world right now."
 def status(ctx: RunContext[ChatDeps]) -> str:
     """Health, hunger, position, time and weather, so every reply can take them into account."""
     return world.describe_status(ctx.deps.state) if ctx.deps.state else NO_STATE
+
+
+@agent.instructions
+def known_chests(ctx: RunContext[ChatDeps]) -> str:
+    """How many chests the agent knows about, so it uses find_item rather than guessing."""
+    count = len(ctx.deps.chests.all())
+    return f'You remember the contents of {count} chests; use find_item to look things up.' if count else ''
 
 
 @agent.instructions

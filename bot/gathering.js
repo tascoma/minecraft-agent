@@ -164,6 +164,8 @@ export function installGathering(bot, { say, log, survival, resume }) {
 
   // Set by crafting.js: makes a tool the bot needs for gathering, e.g. a wooden pickaxe for stone.
   let makeTool = null
+  // Set by storage.js: empties the inventory into a chest at the base, true if that freed space.
+  let dropOff = null
 
   /**
    * Break blocks until the bot has `count` more of `target`'s items. Used by the collect job and by
@@ -180,6 +182,11 @@ export function installGathering(bot, { say, log, survival, resume }) {
       while (!task.cancelled && got() < count) {
         // Let a survival reflex (backing off, eating, sleeping) finish before carrying on.
         if (survival.busy()) { await sleep(500); continue }
+        // A full inventory can't take any more: empty it at the base if there is one.
+        if (bot.inventory.emptySlotCount() === 0) {
+          if (!dropOff || !(await dropOff(task))) { reason = 'my inventory is full'; break }
+          continue
+        }
         const block = findBlock(target, skipped)
         if (!block) { reason = `there's no more ${target.label} within ${searchRadius} blocks I'm allowed to dig`; break }
         const tool = missingTool(block)
@@ -295,5 +302,6 @@ export function installGathering(bot, { say, log, survival, resume }) {
     pickUpDrops,
     stop,
     setToolMaker: (fn) => { makeTool = fn },
+    setDropOff: (fn) => { dropOff = fn },
   }
 }

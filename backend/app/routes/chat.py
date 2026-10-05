@@ -10,6 +10,7 @@ from app.agents.agent import ChatDeps, agent
 from app.schema.chat import BotAction, ChatRequest, ChatResponse, ProtectedSpot
 from app.services import world
 from app.services.memory import memory
+from app.services.chests import Chest, get_chest_store
 from app.services.places import get_place_store, protected_spots
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,24 @@ def log_messages(messages: list[ModelMessage], *, failed: bool = False) -> None:
 async def places(world: str | None = None) -> list[ProtectedSpot]:
     """Saved places of one world, fetched by the bot when it joins so its no-digging zones are right from the start."""
     return protected_spots(get_place_store(world or None))
+
+
+@router.get('/chests')
+async def chests(world: str | None = None) -> list[Chest]:
+    """Every chest the bot remembers in a world, fetched when it joins so it knows where things are."""
+    return get_chest_store(world or None).all()
+
+
+@router.post('/chests')
+async def save_chest(chest: Chest, world: str | None = None) -> None:
+    """The bot reports a chest's contents each time it opens one."""
+    get_chest_store(world or None).save(chest)
+
+
+@router.delete('/chests')
+async def forget_chest(x: int, y: int, z: int, dimension: str, world: str | None = None) -> None:
+    """The bot found a chest it remembered gone (broken, or never there again)."""
+    get_chest_store(world or None).remove(x, y, z, dimension)
 
 
 @router.post('/chat')
