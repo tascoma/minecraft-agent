@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.anthropic import AnthropicModel
+from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.workspaces import LocalWorkspaceBackend
 from pydantic_ai_harness.skills import Skills
@@ -40,6 +40,13 @@ agent = Agent(
         provider=AnthropicProvider(api_key=settings.anthropic_api_key.get_secret_value()),
     ),
     deps_type=ChatDeps,
+    # Prompt caching. The ~5k tokens of tool definitions are identical on every request, so they're
+    # cached on their own (Haiku 4.5 only caches prefixes of 4096+ tokens, which they clear) and reused
+    # across messages for 5 minutes. Automatic caching then moves a second breakpoint along the
+    # conversation, so the 2nd and 3rd model requests of a run (after tool calls) reuse the
+    # instructions and history too; those change between messages because of the status line.
+    # Cache reads cost a tenth of normal input; writes 1.25x.
+    model_settings=AnthropicModelSettings(anthropic_cache_tool_definitions=True, anthropic_cache=True),
     # Haiku often writes its reply next to a tool call and then answers the tool result with nothing.
     # Retrying makes it call the tool again, so don't retry much; the /chat route falls back to that
     # earlier text instead.

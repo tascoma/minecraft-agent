@@ -108,11 +108,14 @@ async def chat(request: ChatRequest) -> ChatResponse:
     memory.remember(request.username, result.new_messages(), world_id)
     usage = result.usage
     logger.info(
-        'reply to %s (%.1fs, %d in / %d out tokens): %s',
+        'reply to %s (%.1fs, %d in (%d cached, %d cache writes) / %d out tokens, %d requests): %s',
         request.username,
         time.perf_counter() - started,
         usage.input_tokens,
+        usage.cache_read_tokens,
+        usage.cache_write_tokens,
         usage.output_tokens,
+        usage.requests,
         result.output,
     )
     return ChatResponse(
