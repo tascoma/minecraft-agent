@@ -48,7 +48,7 @@ The bot does one thing at a time: follow, stand still, or walk somewhere. When i
 |---|---|---|---|
 | Come to the player now and wait there ("come here") | Tool | `come_here`, `GoalNear` | ✅ |
 | Go to coordinates | Tool | `go_to`, `GoalNear` / `GoalXZ` | ✅ |
-| Remember named places ("this is home", "the mine") and go back to them | Tool + memory | `save_place`, `go_to_place`, `forget_place`; `backend/data/places.json` | ✅ |
+| Remember named places ("this is home", "the mine") and go back to them | Tool + memory | `save_place`, `go_to_place`, `forget_place`; `backend/data/worlds/<world id>/places.json` | ✅ |
 | Say when it arrives or can't find a way | Bot | `pathfinder.goto` promise | ✅ |
 | Explore in a direction and report what it finds | Tool | `GoalXZ` + Phase 1 scans; needs bot → backend events | 🔲 |
 | Swim, climb ladders, open doors and gates | Reflex | `bot/movements.js` (wooden doors and gates; iron ones need redstone) | ✅ |
@@ -189,7 +189,7 @@ Phases 4 onward need these before they work well:
 
 1. **Task system.** *Partly done.* Jobs like "get 20 cobblestone" run one at a time, can be cancelled, and report progress and results in chat (`bot/tasks.js`). Still to come: a queue of several jobs, and telling the agent when a job ends (needs bot → backend events).
 2. **Bot → backend events.** The bot reports things that happen (task finished, under attack, low health) so the agent can react, not only when the player chats. Each event costs tokens, so they must be rate-limited and only sent when the agent needs to decide something.
-3. **Persistent memory.** Waypoints, chest contents and player notes need to survive restarts. A small JSON or SQLite file in the backend is enough to start with.
+3. **Persistent memory.** *Partly done.* Named places are saved per world (`backend/data/worlds/<world id>/`), keyed by the world id the bot sends. Chest contents and player notes should go in the same per-world folder.
 4. **Safety rules.** Never attack players, never dig inside protected areas (done), never take from the player's chests unless asked. Enforced in the bot, not left to the model.
 5. **Tests.** *Done for Phases 1–4:* backend unit tests (`uv run pytest`), bot unit tests (`npm test`), and in-game checks with a second player (`npm run check:survival`, `npm run check:gathering`). Each new phase should add to all three.
 

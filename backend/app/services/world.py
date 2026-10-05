@@ -82,7 +82,7 @@ def describe_tools(state: BotState) -> str:
 def describe_status(state: BotState) -> str:
     """One line with the essentials, added to the agent's instructions on every run."""
     held = state.held_item or 'nothing'
-    world = f'World {state.world_id}. ' if state.world_id else ''
+    world = f'World id: {state.world_id} (a label for this world, not its seed). ' if state.world_id else ''
     status = (
         f'{world}Your status: health {state.health:g}/20 ({describe_health(state.health)}), '
         f'food {state.food}/20 ({describe_food(state.food)}), '

@@ -99,5 +99,5 @@ def test_tools_in_status():
 
 
 def test_status_names_the_world():
-    assert 'World seed-ab12.' in world.describe_status(make_state(world_id='seed-ab12'))
-    assert 'World' not in world.describe_status(make_state())
+    assert 'World id: seed-ab12 ' in world.describe_status(make_state(world_id='seed-ab12'))
+    assert 'World id' not in world.describe_status(make_state())

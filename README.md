@@ -40,6 +40,8 @@ cd bot && npm install       # Node deps
    ```
 4. Type in Minecraft chat. The bot replies.
 
+Each world keeps its own saved places and chat memory. The bot tells worlds apart by their seed, so reopening a world on a new LAN port is still the same world; the id is logged on join (`world: seed-…`). Two worlds with the same seed share data unless you name them with `MC_WORLD` in `.env`.
+
 Teleporting (`"tp to me"`) needs commands allowed: choose **Allow Cheats: ON** when you open the world to LAN.
 
 ## Test

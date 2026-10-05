@@ -216,7 +216,7 @@ backend/app/
   agents/agent.py            the agent, ChatDeps, and its tools
   routes/chat.py             POST /chat: runs the agent, logs, returns reply + actions
   services/world.py          turns the bot's state snapshot into text for the agent
-  services/places.py         named places, saved to backend/data/places.json
+  services/places.py         named places, saved per world to backend/data/worlds/<id>/places.json
   services/memory.py         each player's recent exchanges, in memory only
 backend/data/                things the agent remembers between runs (gitignored)
   schema/chat.py             ChatRequest, ChatResponse, BotAction

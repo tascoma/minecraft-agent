@@ -38,15 +38,17 @@ The words this project uses for its own building blocks.
 
 **Make job**: What `make_item` starts: craft or smelt an item, working out and doing every step, including gathering materials and making tools to gather them (`bot/crafting.js`).
 
-**Named place**: A position saved under a name ("home", "the mine") with `save_place`, kept in `backend/data/places.json` so it survives restarts. The agent sees every saved name and its distance on each run. Sometimes called a waypoint.
+**Named place**: A position saved under a name ("home", "the mine") with `save_place`, kept per world in `backend/data/worlds/<world id>/places.json` so it survives restarts. The agent sees every saved name and its distance on each run. Sometimes called a waypoint.
 
 **Query tool**: A tool that reads the world instead of changing it: `check_inventory`, `look_around`, `nearby_entities`, `where_are_we`. It answers from the state snapshot. Compare *action tool*.
+
+**World id**: Which world the bot is in, so places and conversation memory stay separate per world. The bot takes it from the seed hash the server sends on login (`seed-b766…`), or from `MC_WORLD` if set, or the server address as a last resort (`bot/world.js`). Sent in the state snapshot as `world_id`.
 
 **Protected area**: The 16 blocks (horizontally) around every saved place. The bot never digs or places blocks there.
 
 **Reflex**: Behavior the bot runs by itself, triggered by game events or timers, with no backend call and no tokens. Following the player is a reflex, and so are the survival reflexes in `bot/survival.js` (eat, armor, back off, escape lava and water, sleep). Used for anything time-critical, frequent, or obvious. A command from the player cancels a running reflex.
 
-**State snapshot**: The bot's current situation, sent with every chat message: health, food, position, dimension, time, weather, inventory, nearby blocks and entities, where the player is, and where the bot last died. Built by `bot/state.js`, defined as `BotState` in the schema.
+**State snapshot**: The bot's current situation, sent with every chat message: world id, health, food, position, dimension, time, weather, inventory, nearby blocks and entities, where the player is, and where the bot last died. Built by `bot/state.js`, defined as `BotState` in the schema.
 
 **Skill**: A `SKILL.md` playbook under `skills/` describing how to do something multi-step. The agent only sees each skill's name and description until it decides to load one. Skills are knowledge; tools are actions.
 
@@ -70,7 +72,7 @@ The words this project uses for its own building blocks.
 
 **Context**: Everything the model sees for one request: instructions, the message, tool definitions, any loaded skills, and earlier tool results. Larger context means more input tokens.
 
-**Conversation memory**: The player's last 5 exchanges with the bot, including tool calls, passed to the agent with each new message so follow-ups make sense. Kept in memory only and forgotten after 10 minutes of quiet (`backend/app/services/memory.py`).
+**Conversation memory**: The player's last 5 exchanges with the bot, including tool calls, passed to the agent with each new message so follow-ups make sense. Kept separately per world, in memory only, and forgotten after 10 minutes of quiet (`backend/app/services/memory.py`).
 
 **Deps (dependencies)**: Per-request data passed to `agent.run(..., deps=...)` that tools can read and write through `RunContext`. In this project, `ChatDeps`.
 
@@ -132,7 +134,7 @@ The words this project uses for its own building blocks.
 
 ## Backend and tooling
 
-**.env**: The local settings file at the repo root: API key, model, Minecraft host and port. Ignored by git. `.env.example` is the committed template.
+**.env**: The local settings file at the repo root: API key, model, Minecraft host and port, and optionally a world name (`MC_WORLD`). Ignored by git. `.env.example` is the committed template.
 
 **Endpoint**: A URL the backend answers. `POST /chat` takes a chat message and returns a reply and actions; `GET /health` checks the backend is up.
 
