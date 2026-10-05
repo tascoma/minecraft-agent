@@ -18,7 +18,7 @@ const tag = 'combat_check'
 
 joinTester(async ({ give, companion: bot, say, command, waitFor, check, count, distanceTo, openSpot, playersNear, seen, clearSeen, position, usingItem, offHand }) => {
   // Backing away from the creeper can land the bot somewhere awkward; later checks start from here.
-  const backToStart = () => start && command(`/tp ${bot} ${start.x} ${start.y} ${start.z}`)
+  const backToStart = () => start && command(`/tp ${bot} ${start.x + 0.5} ${start.y} ${start.z + 0.5}`)
   // Summon a tagged mob next to the bot and wait until the tester can see it.
   async function summon(mob, distance, nbt = '', at = null) {
     const offset = at ?? openSpot(distance)

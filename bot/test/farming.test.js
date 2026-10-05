@@ -22,6 +22,8 @@ describe('farming', () => {
     assert.equal(animalName('the chickens'), 'chicken')
     assert.equal(animalName('sheep'), 'sheep')
     assert.equal(animalName('pig'), 'pig')
+    assert.equal(animalName('blazes'), 'blaze')
+    assert.equal(animalName('Endermen'), 'enderman')
   })
 
   it('understands crops by crop, item or seed name', () => {
@@ -43,6 +45,7 @@ describe('farming', () => {
     assert.deepEqual(animalsFor('beef'), ['cow', 'mooshroom'])
     assert.deepEqual(animalsFor('mutton'), ['sheep'])
     assert.equal(animalsFor('cobblestone'), null)
+    assert.deepEqual(animalsFor('blaze_rod'), ['blaze'])
   })
 
   it('reads babies and sheared sheep from entity metadata', () => {

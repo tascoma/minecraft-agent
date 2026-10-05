@@ -106,7 +106,7 @@ joinTester(async ({ client: t, companion: bot, give, say, command, waitFor, chec
     say('check the chests')
     const forgot = await waitFor(/Looked in|no chest/, 30000)
     check('forgets chests that are gone', /no chest/.test(forgot ?? ''), forgot)
-    command(`/tp ${bot} ${at(returnTo)}`)
+    command(`/tp ${bot} ${returnTo.x + 0.5} ${returnTo.y} ${returnTo.z + 0.5}`) // block centre: a corner can leave it stuck in a wall
     await sleep(1000)
   }
 })

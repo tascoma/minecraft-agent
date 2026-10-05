@@ -111,7 +111,7 @@ joinTester(async ({ client: t, companion: bot, give, say, command, waitFor, chec
     say('stop')
     await sleep(2000)
     await saved()
-    command(`/tp ${bot} ${at(returnTo)}`)
+    command(`/tp ${bot} ${returnTo.x + 0.5} ${returnTo.y} ${returnTo.z + 0.5}`) // block centre: a corner can leave it stuck in a wall
     await sleep(1000)
   }
 })

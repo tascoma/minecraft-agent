@@ -110,6 +110,16 @@ const maxSteps = 60
 const stationRange = 16
 const maxCount = 64
 
+/** The item a player (or the model) means: "Sticks" -> stick, "torches" -> torch, "oak planks" -> oak_planks. */
+export function itemName(registry, spoken) {
+  const name = spoken.toLowerCase().trim().replaceAll(' ', '_').replace(/^minecraft:/, '')
+  if (registry.itemsByName[name]) return name
+  for (const singular of [name.replace(/es$/, ''), name.replace(/s$/, '')]) {
+    if (registry.itemsByName[singular]) return singular
+  }
+  return name
+}
+
 export function installCrafting(bot, { say, log, gathering, resume }) {
   const { Recipe } = require('prismarine-recipe')(bot.registry)
   const registry = bot.registry
@@ -380,7 +390,7 @@ export function installCrafting(bot, { say, log, gathering, resume }) {
   })
 
   function make({ item, count: wanted }) {
-    const name = item.toLowerCase().trim().replaceAll(' ', '_').replace(/^minecraft:/, '')
+    const name = itemName(registry, item)
     if (!registry.itemsByName[name]) {
       say(`I don't know what "${item}" is.`)
       return

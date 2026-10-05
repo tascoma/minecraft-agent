@@ -12,7 +12,9 @@ import { CompanionMovements, setProtectedSpots } from './movements.js'
 import { snapshot } from './state.js'
 import { installStorage, setChestMemory } from './storage.js'
 import { installSurvival } from './survival.js'
-import { cancelTask, currentTask } from './tasks.js'
+import { installTrading } from './trading.js'
+import { installTravel } from './travel.js'
+import { cancelTask, currentTask, queued } from './tasks.js'
 import { currentWorldId, setWorldFromLogin } from './world.js'
 
 const { pathfinder, goals } = pathfinderPkg
@@ -166,6 +168,8 @@ let combat = null
 let farming = null
 let building = null
 let storage = null
+let travel = null
+let trading = null
 
 function updateFollowGoal() {
   // A reflex (backing off, sleeping, fetching items) or a job (gathering) is driving; it resumes
@@ -260,44 +264,60 @@ function resume() {
   else bot.pathfinder.setGoal(null)
 }
 
-function runAction(action) {
+// The first action of a reply replaces whatever reflex or job is running; jobs from the rest of the
+// same reply queue up behind it ("make a pickaxe, then a sword").
+function runAction(action, { first = true } = {}) {
   try {
-    // The player's command wins over whatever reflex or job is running.
-    survival?.cancel()
-    cancelTask()
-    if (action.type === 'follow') follow(action.username)
-    else if (action.type === 'stay') stay()
-    else if (action.type === 'come') come(action.username)
-    else if (action.type === 'goto') goTo(action)
-    else if (action.type === 'teleport') teleport(action.username)
-    else if (action.type === 'recover') survival.recoverItems()
-    else if (action.type === 'collect') gathering.collect(action)
-    else if (action.type === 'give') gathering.give(action)
-    else if (action.type === 'make') crafting.make(action)
-    else if (action.type === 'attack') combat.attack(action)
-    else if (action.type === 'guard') combat.guard(action)
-    else if (action.type === 'hunt') farming.hunt(action)
-    else if (action.type === 'harvest') farming.harvest(action)
-    else if (action.type === 'plant') farming.plant(action)
-    else if (action.type === 'breed') farming.breed(action)
-    else if (action.type === 'fish') farming.fish(action)
-    else if (action.type === 'shear') farming.shear(action)
-    else if (action.type === 'build') building.build(action)
-    else if (action.type === 'light') building.lightUp(action)
-    else if (action.type === 'place') building.place(action)
-    else if (action.type === 'pillar') building.pillar(action)
-    else if (action.type === 'bridge') building.bridge(action)
-    else if (action.type === 'store') storage.store(action)
-    else if (action.type === 'take') storage.take(action)
-    else if (action.type === 'inspect') storage.inspect(action)
-    else if (action.type === 'sort') storage.sort(action)
-    else {
-      log('WARN', `unknown action: ${JSON.stringify(action)}`)
-      reportError(`I don't know how to do "${action.type}" yet. Is the bot out of date?`)
+    if (first) {
+      // The player's command wins over whatever reflex or job is running.
+      survival?.cancel()
+      cancelTask()
+      dispatch(action)
+    } else {
+      queued(() => dispatch(action))
     }
   } catch (err) {
     log('ERROR', `action ${JSON.stringify(action)} failed: ${err.stack ?? err}`)
     reportError(`I couldn't ${action.type}: ${err.message}`)
+  }
+}
+
+function dispatch(action) {
+  if (action.type === 'follow') follow(action.username)
+  else if (action.type === 'stay') stay()
+  else if (action.type === 'come') come(action.username)
+  else if (action.type === 'goto') goTo(action)
+  else if (action.type === 'teleport') teleport(action.username)
+  else if (action.type === 'recover') survival.recoverItems()
+  else if (action.type === 'collect') gathering.collect(action)
+  else if (action.type === 'give') gathering.give(action)
+  else if (action.type === 'make') crafting.make(action)
+  else if (action.type === 'attack') combat.attack(action)
+  else if (action.type === 'guard') combat.guard(action)
+  else if (action.type === 'hunt') farming.hunt(action)
+  else if (action.type === 'harvest') farming.harvest(action)
+  else if (action.type === 'plant') farming.plant(action)
+  else if (action.type === 'breed') farming.breed(action)
+  else if (action.type === 'fish') farming.fish(action)
+  else if (action.type === 'shear') farming.shear(action)
+  else if (action.type === 'build') building.build(action)
+  else if (action.type === 'light') building.lightUp(action)
+  else if (action.type === 'place') building.place(action)
+  else if (action.type === 'pillar') building.pillar(action)
+  else if (action.type === 'bridge') building.bridge(action)
+  else if (action.type === 'store') storage.store(action)
+  else if (action.type === 'take') storage.take(action)
+  else if (action.type === 'inspect') storage.inspect(action)
+  else if (action.type === 'sort') storage.sort(action)
+  else if (action.type === 'mine') gathering.mineFor(action)
+  else if (action.type === 'portal') building.portal(action)
+  else if (action.type === 'enter_portal') travel.enterPortal()
+  else if (action.type === 'throw_eye') travel.throwEye()
+  else if (action.type === 'trades') trading.listTrades()
+  else if (action.type === 'trade') trading.trade(action)
+  else {
+    log('WARN', `unknown action: ${JSON.stringify(action)}`)
+    reportError(`I don't know how to do "${action.type}" yet. Is the bot out of date?`)
   }
 }
 
@@ -342,6 +362,8 @@ function connect() {
     building = installBuilding(bot, { say, log, survival, crafting, resume })
     storage = installStorage(bot, { say, log, survival, resume, reportChest, forgetChest })
     gathering.setDropOff(storage.dropOff)
+    travel = installTravel(bot, { say, log, survival, following: () => followTarget, resume })
+    trading = installTrading(bot, { say, log, resume })
   })
 
   bot.on('entitySpawn', (entity) => {
@@ -377,7 +399,7 @@ function connect() {
     const { reply, actions = [], protected_places: protectedPlaces } = await res.json()
     setProtectedSpots(protectedPlaces)
     say(reply)
-    actions.forEach(runAction)
+    actions.forEach((action, i) => runAction(action, { first: i === 0 }))
   }
 
   bot.on('death', () => {

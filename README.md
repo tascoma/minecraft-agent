@@ -57,9 +57,10 @@ Talk to it in plain chat; these are examples, not fixed commands.
 | Food and farming | "hunt 2 cows", "make cooked beef", "harvest the wheat", "plant 16 wheat", "breed the cows", "catch 5 fish", "shear the sheep" |
 | Building | "build a shelter", "build a hut out of wood at home", "put a chest here", "light up the area", "bridge 10 blocks east", "pillar up 5" |
 | Storage | "put everything away", "put away the cobblestone", "grab 10 iron", "check the chests", "sort the chests" |
-| Stopping | "stop": any new request also replaces the current job |
+| Progression | "get me full iron gear", "go mining for diamonds", "build a nether portal", "go through the portal", "hunt 6 blazes", "throw an eye of ender", "what does the villager sell?", "buy bread from the villager" |
+| Stopping | "stop": any new request also replaces the current job (several things asked for at once run one after another) |
 
-By itself, with no tokens, it follows you, eats, wears the best armor it has, backs off when badly hurt, gets out of lava and water, sleeps when you sleep, fights mobs that attack you or it, backs away from creepers, raises a shield at arrows, and takes a full inventory to a chest at a saved place.
+By itself, with no tokens, it follows you, eats, wears the best armor it has, backs off when badly hurt, gets out of lava and water, sleeps when you sleep, fights mobs that attack you or it, backs away from creepers, raises a shield at arrows, and takes a full inventory to a chest at a saved place, and follows you through Nether portals.
 
 ## Test
 
@@ -87,6 +88,7 @@ npm run check:combat       # fights back, defends you, creepers, kills on reques
 npm run check:farming      # hunt, cook, breed, shear, harvest and replant, plant by water, fish
 npm run check:building     # chest, shelter with door, torches, pillar, bridge
 npm run check:storage      # look in, find, sort, put away, take out, forget broken chests
+npm run check:progression  # two jobs in turn, Nether portal built and lit, eye of ender, villager trades
 ```
 
 ## Roadmap
@@ -103,5 +105,5 @@ The full list is in [docs/survival-functionality-plan.md](docs/survival-function
 - [x] Food and farming: hunt, cook, harvest and replant, plant a field by water, breed, fish, shear (Phase 7)
 - [x] Building: place blocks, light an area, emergency shelter or hut with a door, bridge, pillar up (Phase 8)
 - [x] Base and storage: put away, take out, remember and sort chests, drop off a full inventory at the base (Phase 9)
-- [ ] Long-term goals: iron gear, diamonds, the Nether, the End (Phase 10)
+- [x] Progression: several jobs per request, mining trips for diamonds and ores, Nether portals (and following you through), blazes and endermen, eyes of ender, villager trading (Phase 10)
 - [ ] Being a good companion: long-term memory, tips, sharing work, a token budget (Phase 11)

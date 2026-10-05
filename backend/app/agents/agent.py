@@ -51,7 +51,8 @@ agent = Agent(
         'or go somewhere. Moves happen after your reply and the bot announces in chat whether they worked, '
         'so say you are on your way, never that you have arrived or teleported. '
         'If the player asks for something new while you are busy with a job, do the new thing: it replaces the '
-        'current job, unless they say to finish first. '
+        'current job, unless they say to finish first. To do several jobs in a row (an iron pickaxe, then a sword, '
+        'then armor), call the tools in order in the same reply: they run one after another. '
         'Use your lookup tools to check your inventory and surroundings before answering questions about them; never guess. '
         'Earlier messages show what happened before, not now: your status line is the current truth, and when the player '
         'asks for something again, call the tool again instead of assuming it is already done.'
@@ -118,7 +119,8 @@ def collect(ctx: RunContext[ChatDeps], item: str, count: int) -> str:
 @agent.tool
 def make_item(ctx: RunContext[ChatDeps], item: str, count: int = 1) -> str:
     """Craft or smelt an item, e.g. "stone_pickaxe", "torch", "chest", "furnace", "iron_ingot", "glass",
-    "cooked_beef". Use the item's Minecraft name. Count is 1 to 64.
+    "cooked_beef". Use the item's Minecraft name. Count is 1 to 64. For several different items, call this
+    once per item in the same reply (not one now and one later): they queue and run in order.
 
     You work out the whole chain yourself: planks from logs, sticks, a crafting table or furnace (placed
     and picked back up), and you gather missing materials, making any tool you need to mine them. For
@@ -187,7 +189,9 @@ def guard_area(ctx: RunContext[ChatDeps], place: str | None = None) -> str:
 @agent.tool
 def hunt(ctx: RunContext[ChatDeps], animal: str, count: int = 1) -> str:
     """Hunt animals for food or leather and pick up what they drop: "cow", "pig", "chicken", "sheep",
-    "rabbit". Count is 1 to 64. You skip babies and leave the last two of a kind so they can breed.
+    "rabbit". Also monsters for what they drop: "blaze" (blaze rods), "enderman" (ender pearls),
+    "spider" (string), "skeleton" (bones). Count is 1 to 64. With animals you skip babies and leave the
+    last two of a kind so they can breed.
     """
     ctx.deps.actions.append(BotAction(type='hunt', target=animal, count=count))
     return f'Started hunting {count} {animal}. The bot will report how it goes, so do not claim it is done.'
@@ -374,6 +378,64 @@ def find_item(ctx: RunContext[ChatDeps], item: str) -> str:
         away = f', {distance(chest, here):.0f} blocks away' if here and ctx.deps.state.dimension == chest.dimension else ''
         lines.append(f'{what} in the chest at ({chest.x}, {chest.y}, {chest.z}){away}')
     return '; '.join(lines) + '.'
+
+
+@agent.tool
+def mine_for(ctx: RunContext[ChatDeps], ore: str, count: int = 1) -> str:
+    """Go on a mining trip for an ore: "diamond", "iron", "gold", "copper", "coal", "redstone", "lapis",
+    "emerald". You look nearby, then dig down to the height it's most common at (diamonds around y -58)
+    and tunnel outwards until you have `count` (1 to 64). Makes the pickaxe it needs first (diamonds
+    need iron). Long and risky (caves, lava, mobs); you end up deep underground.
+    """
+    ctx.deps.actions.append(BotAction(type='mine', item=ore, count=count))
+    return f'Started a mining trip for {count} {ore}. The bot will report, so do not claim it found any.'
+
+
+@agent.tool
+def build_nether_portal(ctx: RunContext[ChatDeps], place: str | None = None) -> str:
+    """Build a Nether portal frame (10 obsidian, plus 4 corner blocks) a few blocks in front of the
+    player, or at a saved place, and light it with flint and steel. Gets obsidian and flint and steel
+    if it can (obsidian needs a diamond pickaxe).
+    """
+    action = _where(ctx, BotAction(type='portal', username=ctx.deps.username), place)
+    if isinstance(action, str):
+        return action
+    ctx.deps.actions.append(action)
+    return 'Started building a Nether portal. The bot will say when it is lit, so do not claim it is.'
+
+
+@agent.tool
+def enter_portal(ctx: RunContext[ChatDeps]) -> str:
+    """Walk into the nearest portal (within 32 blocks) to go to the Nether or back. You also follow the
+    player through a portal by yourself when you're following them.
+    """
+    ctx.deps.actions.append(BotAction(type='enter_portal'))
+    return 'Heading through the portal. The bot will say when it arrives.'
+
+
+@agent.tool
+def throw_ender_eye(ctx: RunContext[ChatDeps]) -> str:
+    """Throw an eye of ender (Overworld only) and say which way it flies, towards the stronghold. If it
+    goes straight down, the stronghold is right below.
+    """
+    ctx.deps.actions.append(BotAction(type='throw_eye'))
+    return 'Throwing an eye of ender. The bot will say which way it went.'
+
+
+@agent.tool
+def villager_trades(ctx: RunContext[ChatDeps]) -> str:
+    """Look at what the nearest villager trades and say it in chat."""
+    ctx.deps.actions.append(BotAction(type='trades'))
+    return 'Checking the villager. The bot will list the trades in chat.'
+
+
+@agent.tool
+def trade_with_villager(ctx: RunContext[ChatDeps], item: str, count: int = 1) -> str:
+    """Buy an item from a villager nearby that sells it ("an iron pickaxe", "bread"), paying with what
+    you have (usually emeralds). Only when the player asks.
+    """
+    ctx.deps.actions.append(BotAction(type='trade', item=item, count=count))
+    return f'Looking for a villager who sells {item}. The bot will say how it went.'
 
 
 @agent.tool

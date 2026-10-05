@@ -13,7 +13,8 @@
     "check:combat": "node --env-file-if-exists=../.env scripts/check-combat.js",
     "check:farming": "node --env-file-if-exists=../.env scripts/check-farming.js",
     "check:building": "node --env-file-if-exists=../.env scripts/check-building.js",
-    "check:storage": "node --env-file-if-exists=../.env scripts/check-storage.js"
+    "check:storage": "node --env-file-if-exists=../.env scripts/check-storage.js",
+    "check:progression": "node --env-file-if-exists=../.env scripts/check-progression.js"
   },
   "dependencies": {
     "mineflayer": "^4.39.0",

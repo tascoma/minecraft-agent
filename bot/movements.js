@@ -59,6 +59,12 @@ export class CompanionMovements extends Movements {
     this.canDig = true
     this.maxDropDown = 3 // falls of more than 3 blocks hurt
     this.liquidCost = 5 // walk around water rather than swim through it when there's a reasonable way
+    // Never walk into a portal by accident: it would carry the bot to another dimension. Going
+    // through one on purpose steps in by hand (travel.js).
+    for (const name of ['nether_portal', 'end_portal', 'end_gateway']) {
+      const block = bot.registry.blocksByName[name]
+      if (block) this.blocksToAvoid.add(block.id)
+    }
     // The library's canOpenDoors only covers fence gates; add wooden doors.
     this.canOpenDoors = true
     for (const block of bot.registry.blocksArray) {

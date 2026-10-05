@@ -19,6 +19,23 @@ const pathSearchRadius = searchRadius + 32
 // Give up on one block after this long (the pathfinder can keep re-planning forever).
 const blockTimeoutMs = 45_000
 const maxCount = 64
+// Mining trips: how long the walk down may take, and how far and how many times to tunnel out.
+const descendMs = 5 * 60_000
+const legLength = 24
+const legMs = 3 * 60_000
+const maxLegs = 6
+
+// Items minecraft-data doesn't list as drops because they only drop sometimes: item -> the blocks
+// that drop it (gravel drops flint one time in ten, grass drops wheat seeds one time in eight).
+const chanceDrops = {
+  flint: ['gravel'],
+  wheat_seeds: ['short_grass', 'tall_grass'],
+}
+
+// The height each ore is most common at, for mining trips (by the item it drops).
+export const oreLevels = {
+  diamond: -58, redstone: -58, lapis_lazuli: 0, raw_gold: -16, raw_iron: 16, raw_copper: 48, coal: 96, emerald: 100,
+}
 
 // Words players use for "any kind of X".
 const aliases = {
@@ -55,6 +72,10 @@ export function resolveTarget(registry, name) {
     if (!blocks.length && registry.blocksByName[name] && natural(registry.blocksByName[name])) {
       blocks = [registry.blocksByName[name], registry.blocksByName[`deepslate_${name}`]].filter(Boolean)
     }
+  }
+  if (!blocks?.length && chanceDrops[name]) {
+    blocks = chanceDrops[name].map((n) => registry.blocksByName[n]).filter(Boolean)
+    if (blocks.length) return { blockIds: blocks.map((b) => b.id), items: new Set([name]), label: pretty(name) }
   }
   if (!blocks?.length) return null
   const items = new Set(blocks.flatMap((b) => (b.drops ?? []).map((id) => registry.items[id]?.name)).filter(Boolean))
@@ -177,6 +198,8 @@ export function installGathering(bot, { say, log, survival, resume }) {
     const skipped = new Set()
     let failures = 0
     let reason = null
+    // True when it stopped because there's nothing left in range (rather than getting stuck).
+    let exhausted = false
     enterGathering()
     try {
       while (!task.cancelled && got() < count) {
@@ -188,7 +211,11 @@ export function installGathering(bot, { say, log, survival, resume }) {
           continue
         }
         const block = findBlock(target, skipped)
-        if (!block) { reason = `there's no more ${target.label} within ${searchRadius} blocks I'm allowed to dig`; break }
+        if (!block) {
+          reason = `there's no more ${target.label} within ${searchRadius} blocks I'm allowed to dig`
+          exhausted = true
+          break
+        }
         const tool = missingTool(block)
         if (tool) {
           const kind = pretty(tool.replace(/^(wooden|stone|golden|iron|diamond|netherite)_/, ''))
@@ -219,7 +246,7 @@ export function installGathering(bot, { say, log, survival, resume }) {
     } finally {
       leaveGathering()
     }
-    return { got: got(), reason }
+    return { got: got(), reason, exhausted }
   }
 
   function collect({ item, count }) {
@@ -250,6 +277,78 @@ export function installGathering(bot, { say, log, survival, resume }) {
       onCancel: stop,
       onEnd: resume,
     })
+  }
+
+  // A long walk inside a job. A reflex that interrupts it (a fight, eating) isn't a failure: wait for
+  // it to finish and let the caller carry on from wherever the bot is.
+  async function travel(task, goal, ms) {
+    try {
+      await goWithin(bot, goal, ms)
+    } catch (err) {
+      if (task.cancelled || !survival.busy()) throw err
+      while (!task.cancelled && survival.busy()) await sleep(500)
+    }
+  }
+
+  // A mining trip for an ore: look nearby first, then go down to the height it's most common at,
+  // then tunnel outwards in legs, looking again after each, until it has enough or gives up.
+  function mineFor({ item, count }) {
+    const target = resolveTarget(bot.registry, item)
+    const level = target && [...target.items].map((i) => oreLevels[i]).find((y) => y != null)
+    if (!target || level == null) {
+      say(`I don't know where to dig for "${item}". I can go mining for diamonds, iron, gold, copper, coal, redstone, lapis and emeralds.`)
+      return
+    }
+    count = Math.max(1, Math.min(count ?? 1, maxCount))
+    startTask(`mining for ${count} ${target.label}`, async (task) => {
+      let got = 0
+      let reason = null
+      let legs = 0
+      let descents = 0
+      enterGathering()
+      try {
+        // The pickaxe that ore needs, before the long trip down (diamonds need iron or better).
+        const ore = bot.registry.blocks[target.blockIds[0]]
+        const tool = missingTool(ore)
+        if (tool) {
+          if (!makeTool) throw new Error(`I need a ${pretty(tool)}`)
+          await makeTool(task, tool)
+        }
+        while (!task.cancelled && got < count) {
+          const result = await gather(task, target, count - got, {
+            onProgress: (n) => { task.progress = `${got + n}/${count}` },
+          })
+          got += result.got
+          if (got >= count || task.cancelled) break
+          if (!result.exhausted) { reason = result.reason; break }
+          const here = bot.entity.position.floored()
+          if (Math.abs(here.y - level) > 4) {
+            if (++descents > 3) { reason = `I can't get down to y ${level} from here`; break }
+            if (descents === 1) say(`Heading ${here.y > level ? 'down' : 'up'} to y ${level}, where ${target.label} is most common.`)
+            await travel(task, new goals.GoalY(level), descendMs)
+          } else if (legs < maxLegs) {
+            // A new direction each leg: east, south, west, north.
+            const [dx, dz] = [[1, 0], [0, 1], [-1, 0], [0, -1]][legs % 4]
+            legs++
+            task.progress = `${got}/${count}, tunnel ${legs}/${maxLegs}`
+            await travel(task, new goals.GoalXZ(here.x + dx * legLength, here.z + dz * legLength), legMs)
+          } else {
+            reason = `I tunnelled ${maxLegs} times and found no more`
+            break
+          }
+        }
+      } catch (err) {
+        if (!task.cancelled) reason = err.message
+      } finally {
+        leaveGathering()
+      }
+      if (task.cancelled) return
+      const y = Math.floor(bot.entity.position.y)
+      const back = y < 50 ? ` I'm down at y ${y}; say "tp to me" or "follow me" to bring me back.` : ''
+      if (got >= count) say(`Found ${got} ${target.label}.${back}`)
+      else if (got > 0) say(`I only found ${got} ${target.label}: ${reason}.${back}`)
+      else say(`I couldn't find any ${target.label}: ${reason}.${back}`)
+    }, { log, onCancel: stop, onEnd: resume })
   }
 
   // Walk to the player and toss them `count` of an item (all of it if count is missing).
@@ -299,6 +398,7 @@ export function installGathering(bot, { say, log, survival, resume }) {
     collect,
     give,
     gather,
+    mineFor,
     pickUpDrops,
     stop,
     setToolMaker: (fn) => { makeTool = fn },

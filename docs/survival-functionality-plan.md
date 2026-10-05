@@ -156,19 +156,21 @@ Tested in game (`npm run check:crafting`): a stone pickaxe from an empty invento
 | Sort chests by item type | Tool | `sort_chests`: each kind to the chest with the most of it | ✅ |
 | Drop off a full inventory at home automatically | Reflex | chests near a saved place; also mid-gathering | ✅ *Not tested in-game* |
 
-## Phase 10: Progression goals
+## Phase 10: Progression goals ✅
 
 Multi-step goals that combine everything above. The agent plans them with skills and runs them as a series of tool calls, reporting progress as it goes.
 
-| Functionality | Type | Status |
-|---|---|---|
-| Get a full set of iron tools and armor | Skill | 🔲 |
-| Find diamonds | Skill | 🔲 |
-| Set up an enchanting table with bookshelves | Skill | 🔲 |
-| Build a Nether portal and go to the Nether together | Skill | 🔲 |
-| Get blaze rods and ender pearls | Skill | 🔲 |
-| Find a stronghold and prepare for the End | Skill | 🔲 |
-| Trade with villagers | Tool + skill | 🔲 |
+Several jobs asked for in one reply now queue and run in turn (`bot/tasks.js`), so a skill can lay out a whole plan ("make an iron pickaxe, then a sword, then armor") in one go.
+
+| Functionality | Type | Built on | Status |
+|---|---|---|---|
+| Get a full set of iron tools and armor | Skill | `iron-gear`; queued `make_item` calls, `mine_for` "iron" | ✅ *In-game: queueing tested, a full set not* |
+| Find diamonds | Tool + skill | `mine_for`: dig down to the ore's best height, tunnel out in legs; `find-diamonds` | ✅ *Not tested in-game (digs a deep shaft)* |
+| Set up an enchanting table with bookshelves | Skill | `enchanting`; `make_item` hunts leather and gathers sugar cane | ✅ *Advice and making only; the bot can't enchant* |
+| Build a Nether portal and go to the Nether together | Tool + skill | `build_nether_portal`, `enter_portal`, follows the player through a portal; `nether` | ✅ *Crossing not tested in-game* |
+| Get blaze rods and ender pearls | Tool + skill | `hunt` "blaze" / "enderman" (monsters aren't left to breed); `nether` | ✅ *Not tested in-game* |
+| Find a stronghold and prepare for the End | Tool + skill | `throw_ender_eye` reads the eye's direction; `the-end` | ✅ |
+| Trade with villagers | Tool | `villager_trades`, `trade_with_villager` | ✅ |
 
 ## Phase 11: Being a good companion
 
@@ -187,7 +189,7 @@ Multi-step goals that combine everything above. The agent plans them with skills
 
 Phases 4 onward need these before they work well:
 
-1. **Task system.** *Partly done.* Jobs like "get 20 cobblestone" run one at a time, can be cancelled, and report progress and results in chat (`bot/tasks.js`). Still to come: a queue of several jobs, and telling the agent when a job ends (needs bot → backend events).
+1. **Task system.** *Mostly done.* Jobs like "get 20 cobblestone" run one at a time, can be cancelled, and report progress and results in chat; several asked for in one reply queue up (`bot/tasks.js`). Still to come: telling the agent when a job ends (needs bot → backend events).
 2. **Bot → backend events.** The bot reports things that happen (task finished, under attack, low health) so the agent can react, not only when the player chats. Each event costs tokens, so they must be rate-limited and only sent when the agent needs to decide something.
 3. **Persistent memory.** *Partly done.* Named places and chest contents are saved per world (`backend/data/worlds/<world id>/`), keyed by the world id the bot sends. Player notes should go in the same folder.
 4. **Safety rules.** *Done:* never attack players, villagers, golems or pets, or shoot with one in the line of fire; never dig or build by itself inside protected areas; never break blocks a player placed; only take from chests when asked. Enforced in the bot, not left to the model.
@@ -199,4 +201,4 @@ Phases 4 onward need these before they work well:
 2. ~~Phase 3 (staying alive)~~ done. ~~Phase 6 reflexes (fighting back)~~ done, using a small attack loop instead of `mineflayer-pvp` (unmaintained since 2021). Guarding, the bow and the shield are done too, so Phase 6 is complete.
 3. ~~Phases 4 and 5 (gathering, crafting)~~ done. The bot can now go from nothing to stone tools, torches and iron ingots by itself.
 4. ~~Phases 7–9 (food and farming, building, base and storage)~~ done.
-5. Phases 10–11 (long-term goals and companionship).
+5. ~~Phase 10 (progression goals)~~ done. Phase 11 (companionship) is next.

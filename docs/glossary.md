@@ -16,13 +16,13 @@ The words this project uses for its own building blocks.
 
 **Action executor**: The part of `bot/index.js` (`runAction`) that takes actions from the backend and performs them with Mineflayer. Logs a warning for any action type it doesn't recognize.
 
-**Action tool**: A tool that changes the world (`follow_player`, `stay_here`, `come_here`, `go_to`, `go_to_place`, `teleport_to_player`, `recover_items`, `collect`, `give_items`, `make_item`, `attack`, `guard_area`, `hunt`, `harvest_crops`, `plant_crops`, `breed_animals`, `go_fishing`, `shear_sheep`, `build_shelter`, `place_block`, `light_up_area`, `pillar_up`, `bridge`, `store_items`, `take_items`, `check_chests`, `sort_chests`). It doesn't touch Minecraft itself; it adds a `BotAction` for the bot to carry out. Compare *query tool*.
+**Action tool**: A tool that changes the world (`follow_player`, `stay_here`, `come_here`, `go_to`, `go_to_place`, `teleport_to_player`, `recover_items`, `collect`, `give_items`, `make_item`, `attack`, `guard_area`, `hunt`, `harvest_crops`, `plant_crops`, `breed_animals`, `go_fishing`, `shear_sheep`, `build_shelter`, `place_block`, `light_up_area`, `pillar_up`, `bridge`, `store_items`, `take_items`, `check_chests`, `sort_chests`, `mine_for`, `build_nether_portal`, `enter_portal`, `throw_ender_eye`, `villager_trades`, `trade_with_villager`). It doesn't touch Minecraft itself; it adds a `BotAction` for the bot to carry out. Compare *query tool*.
 
 **Backend**: The Python process in `backend/`. The bot's "brain": it receives chat, runs the agent, and replies. It's the only part that costs tokens.
 
 **Bot**: The Node process in `bot/`. The bot's "body": a Minecraft player controlled by code, using Mineflayer. It moves, senses and acts, and never costs tokens. Also refers to the in-game player itself, named **Claude**.
 
-**BotAction**: The data shape of an action, defined in `backend/app/schema/chat.py`: a `type` (`follow`, `stay`, `come`, `goto`, `teleport`, `recover`, `collect`, `give`, `make`, `attack`, `guard`, `hunt`, `harvest`, `plant`, `breed`, `fish`, `shear`, `build`, `light`, `place`, `pillar`, `bridge`, `store`, `take`, `inspect` or `sort`), plus `username` for actions aimed at a player, `x`/`y`/`z`/`label` for `goto` and `guard`, `item`/`count` for gathering and making, `target` (a mob, animal or crop) for `attack` and the farming jobs, and `count` for how many.
+**BotAction**: The data shape of an action, defined in `backend/app/schema/chat.py`: a `type` (`follow`, `stay`, `come`, `goto`, `teleport`, `recover`, `collect`, `give`, `make`, `attack`, `guard`, `hunt`, `harvest`, `plant`, `breed`, `fish`, `shear`, `build`, `light`, `place`, `pillar`, `bridge`, `store`, `take`, `inspect`, `sort`, `mine`, `portal`, `enter_portal`, `throw_eye`, `trades` or `trade`), plus `username` for actions aimed at a player, `x`/`y`/`z`/`label` for `goto` and `guard`, `item`/`count` for gathering and making, `target` (a mob, animal or crop) for `attack` and the farming jobs, and `count` for how many.
 
 **ChatDeps**: The per-request deps object for the agent, in `backend/app/agents/agent.py`. Holds who is talking, the bot's state snapshot, the saved places, and the list of actions tools have recorded during the run.
 
@@ -32,7 +32,7 @@ The words this project uses for its own building blocks.
 
 **Functionality**: Something the player experiences, like "the bot follows me". Not a code unit: it's built from some combination of reflexes, tools and skills.
 
-**Job (task)**: Something that takes a while, like "get 20 cobblestone" or handing items over. One runs at a time (`bot/tasks.js`); "stop", any new command, or dying cancels it. The bot announces progress and the result in chat, and the job is in the state snapshot.
+**Job (task)**: Something that takes a while, like "get 20 cobblestone" or handing items over. One runs at a time (`bot/tasks.js`); "stop", any new command, or dying cancels it. Several jobs asked for in one reply queue up and run in turn; cancelling drops the queue too. The bot announces progress and the result in chat, and the job is in the state snapshot.
 
 **Guard job**: What `guard_area` starts: the bot stands at a spot (where the player is, or a saved place), fights hostile mobs within 12 blocks of it, and walks back after each fight, until the player gives another command (`guard` in `bot/combat.js`).
 
@@ -45,6 +45,8 @@ The words this project uses for its own building blocks.
 **Blueprint**: A small fixed building in `bot/building.js`: "shelter" (3x3 inside, 2-high walls) or "hut" (5x5 inside, 3-high walls), each with a roof and a door facing the player.
 
 **Farming jobs**: Hunting, harvesting, planting, breeding, fishing and shearing (`bot/farming.js`). Each runs as a job, waits out reflexes (a fight, eating) and carries on, and says up front if the inventory is full. Hunting skips babies and leaves the last two adults of a kind so they can still breed.
+
+**Mining trip**: What `mine_for` starts: look for an ore nearby, then dig down to the height it's most common at (diamonds around y -58, iron 16, gold -16) and tunnel outwards in 24-block legs until it has enough (`mineFor` in `bot/gathering.js`).
 
 **Line of fire**: The path an arrow would take, plus a few blocks past the target. The bot won't shoot if a player, villager or pet is within 2 blocks of it (`someoneInTheWay` in `bot/archery.js`).
 
@@ -223,4 +225,3 @@ From [architecture.md](architecture.md), section 6. These aren't built yet, or o
 
 **Memory**: Information the backend saves across restarts, per world. Named places and chest contents exist; notes about the player are still planned.
 
-**Task queue**: Several jobs lined up to run in order ("get logs, then cobblestone"). Today only one job runs at a time.

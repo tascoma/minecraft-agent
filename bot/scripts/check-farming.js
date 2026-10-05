@@ -112,7 +112,7 @@ joinTester(async ({ give, client: t, companion: bot, say, command, waitFor, chec
       `${hunted}; calf ${calves() ? 'alive' : 'gone'}, ${adultsLeft} grown cows left nearby`)
 
     // Hunting may have taken it after a wild cow; carry on from the patch.
-    command(`/tp ${bot} ${at(field)}`)
+    command(`/tp ${bot} ${field.x + 0.5} ${field.y} ${field.z + 0.5}`)
     await sleep(1000)
 
     // Cooking: with beef from the hunt and a furnace and coal given, it smelts.
@@ -179,7 +179,7 @@ joinTester(async ({ give, client: t, companion: bot, say, command, waitFor, chec
     say('stop')
     await sleep(2000)
     await restore()
-    command(`/tp ${bot} ${at(returnTo)}`)
+    command(`/tp ${bot} ${returnTo.x + 0.5} ${returnTo.y} ${returnTo.z + 0.5}`) // block centre: a corner can leave it stuck in a wall
     await sleep(1000)
   }
 })

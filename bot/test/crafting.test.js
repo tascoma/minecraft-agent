@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { describe, it } from 'node:test'
-import { chooseVariant, fuelValue, keyFor, requirements, smelting } from '../crafting.js'
+import { chooseVariant, fuelValue, itemName, keyFor, requirements, smelting } from '../crafting.js'
 import { registry } from './helpers.js'
 
 const require = createRequire(import.meta.url)
@@ -76,5 +76,14 @@ describe('plural', () => {
     assert.equal(plural(8, 'cobblestone'), '8 cobblestone')
     assert.equal(plural(3, 'iron_ingot'), '3 iron ingots')
     assert.equal(plural(2, 'glass'), '2 glass')
+  })
+})
+
+describe('item names', () => {
+  it('understands plurals and spaces', () => {
+    assert.equal(itemName(registry, 'Sticks'), 'stick')
+    assert.equal(itemName(registry, 'torches'), 'torch')
+    assert.equal(itemName(registry, 'oak planks'), 'oak_planks')
+    assert.equal(itemName(registry, 'glass'), 'glass', "doesn't strip a real item's s")
   })
 })

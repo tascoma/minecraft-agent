@@ -47,6 +47,8 @@ class Task(BaseModel):
     description: str
     # e.g. "12/20"; None until the job has made progress.
     progress: str | None = None
+    # Jobs waiting to run after this one.
+    queued: int = 0
 
 
 class BotState(BaseModel):
@@ -106,12 +108,15 @@ class BotAction(BaseModel):
     (a direction, or None for where the player faces) and `count`. build, place and bridge also carry `username`.
     store, take: `item` (None or 'everything' to store all but tools, food and armor), `count`, optional
     `x`/`y`/`z`/`label` for where. inspect, sort: optional `x`/`y`/`z`/`label`.
+    mine, trade: `item` and `count`. portal: optional `x`/`y`/`z`/`label`, and `username`. enter_portal, throw_eye,
+    trades: nothing.
     """
 
     type: Literal['follow', 'stay', 'come', 'goto', 'teleport', 'recover', 'collect', 'give', 'make', 'attack', 'guard',
         'hunt', 'harvest', 'plant', 'breed', 'fish', 'shear',
         'build', 'light', 'place', 'pillar', 'bridge',
         'store', 'take', 'inspect', 'sort',
+        'mine', 'portal', 'enter_portal', 'throw_eye', 'trades', 'trade',
     ]
     username: str | None = None
     x: int | None = None

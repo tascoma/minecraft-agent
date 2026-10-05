@@ -74,3 +74,27 @@ def test_bot_reports_and_fetches_chests(tmp_path, monkeypatch):
     assert client.delete('/chests?world=seed-a&x=1&y=64&z=2&dimension=overworld').status_code == 200
     assert client.get('/chests?world=seed-a').json() == []
     chests_module.get_chest_store.cache_clear()
+
+
+def test_progression_tools_queue_actions(tmp_path):
+    from app.agents.agent import (
+        build_nether_portal, enter_portal, mine_for, throw_ender_eye, trade_with_villager, villager_trades,
+    )
+
+    c = ctx(tmp_path)
+    mine_for(c, ore='diamond', count=3)
+    build_nether_portal(c)
+    build_nether_portal(c, place='home')
+    enter_portal(c)
+    throw_ender_eye(c)
+    villager_trades(c)
+    trade_with_villager(c, item='bread', count=6)
+    assert c.deps.actions == [
+        BotAction(type='mine', item='diamond', count=3),
+        BotAction(type='portal', username='Steve'),
+        BotAction(type='portal', username='Steve', x=1, y=64, z=2, label='home'),
+        BotAction(type='enter_portal'),
+        BotAction(type='throw_eye'),
+        BotAction(type='trades'),
+        BotAction(type='trade', item='bread', count=6),
+    ]

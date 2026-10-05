@@ -95,7 +95,8 @@ def describe_status(state: BotState) -> str:
         status += f' You are fighting a {state.fighting.replace("_", " ")}.'
     if task := state.task:
         progress = f' ({task.progress})' if task.progress else ''
-        status += f' You are busy {task.description}{progress}.'
+        after = f', with {task.queued} more job{"s" if task.queued > 1 else ""} queued after it' if task.queued else ''
+        status += f' You are busy {task.description}{progress}{after}.'
     if death := state.last_death:
         left = max(0, (ITEM_DESPAWN_SECONDS - death.seconds_ago) // 60)
         status += (

@@ -3,6 +3,7 @@
 // tasks.js) and reports in chat. Hunting also feeds crafting, so "make cooked beef" works from nothing.
 import { createRequire } from 'node:module'
 import pathfinderPkg from 'mineflayer-pathfinder'
+import { resolveTarget } from './gathering.js'
 import { startTask } from './tasks.js'
 import { goWithin } from './walk.js'
 
@@ -26,6 +27,8 @@ const fishBiteMs = 45_000
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const pretty = (name) => name.replaceAll('_', ' ')
+// "cows", "sheep", "endermen".
+export const plural = (name) => (name === 'sheep' ? 'sheep' : name === 'enderman' ? 'endermen' : `${pretty(name)}s`)
 const missing = (message) => Object.assign(new Error(message), { name: 'Missing' })
 
 // Which animals drop an item, for hunting it.
@@ -38,6 +41,10 @@ const animalDrops = {
   mutton: ['sheep'],
   rabbit: ['rabbit'],
   rabbit_hide: ['rabbit'],
+  blaze_rod: ['blaze'],
+  ender_pearl: ['enderman'],
+  string: ['spider', 'cave_spider'],
+  bone: ['skeleton', 'stray'],
 }
 export const animalsFor = (item) => animalDrops[item] ?? null
 
@@ -62,6 +69,7 @@ export function animalName(spoken) {
   const name = spoken?.toLowerCase().trim().replace(/^(the|a|an|some)\s+/, '').replaceAll(' ', '_')
   if (!name) return null
   if (breedingFood[name] || name === 'sheep') return name
+  if (name === 'endermen') return 'enderman'
   return name.replace(/s$/, '')
 }
 
@@ -133,12 +141,14 @@ export function installFarming(bot, { say, log, survival, combat, gathering, cra
   // --- Hunting ------------------------------------------------------------
   const adults = (kinds) => Object.values(bot.entities).filter((e) => kinds.includes(e.name) && !isBaby(e))
 
-  // The nearest adult of `kinds` that can be hunted without wiping out the herd, or null.
+  // The nearest adult of `kinds` that can be hunted without wiping out the herd, or null. Monsters
+  // (blazes, endermen) don't breed, so there's nothing to leave.
   function nextAnimal(kinds) {
     const all = adults(kinds)
+    const herd = (e) => all.filter((o) => o.name === e.name && o.position.distanceTo(e.position) <= searchRadius).length
     const candidates = all
       .filter((e) => e.position.distanceTo(me()) <= searchRadius)
-      .filter((e) => all.filter((o) => o.name === e.name && o.position.distanceTo(e.position) <= searchRadius).length > keepForBreeding)
+      .filter((e) => e.type !== 'animal' || herd(e) > keepForBreeding)
     return candidates.sort((a, b) => a.position.distanceTo(me()) - b.position.distanceTo(me()))[0] ?? null
   }
 
@@ -151,8 +161,9 @@ export function installFarming(bot, { say, log, survival, combat, gathering, cra
       if (task.cancelled) break
       const animal = nextAnimal(kinds)
       if (!animal) {
-        const names = kinds.map((k) => (k === 'sheep' ? k : `${k}s`)).join(' or ')
-        const reason = adults(kinds).length > 0
+        const names = kinds.map(plural).join(' or ')
+        const inRange = adults(kinds).filter((e) => e.position.distanceTo(me()) <= searchRadius)
+        const reason = inRange.some((e) => e.type === 'animal')
           ? `the only ${names} nearby are the last ${keepForBreeding}, and I'm leaving them to breed`
           : `there are no ${names} within ${searchRadius} blocks`
         return { kills, reason }
@@ -190,7 +201,7 @@ export function installFarming(bot, { say, log, survival, combat, gathering, cra
         return n >= count
       })
       if (task.cancelled) return
-      const name = (n) => (n === 1 || animal === 'sheep' ? animal : `${animal}s`)
+      const name = (n) => (n === 1 ? pretty(animal) : plural(animal))
       if (kills >= count) say(`Hunted ${kills} ${name(kills)} and picked up what they dropped.`)
       else if (kills > 0) say(`I only got ${kills} ${name(kills)}: ${reason}.`)
       else say(`I couldn't hunt any: ${reason}.`)
@@ -307,9 +318,7 @@ export function installFarming(bot, { say, log, survival, combat, gathering, cra
         // have to be found or given.
         if (have(seed) < count && seed === 'wheat_seeds') {
           say('Getting some seeds from the grass first.')
-          const grass = ['short_grass', 'tall_grass'].map((n) => bot.registry.blocksByName[n]?.id).filter((id) => id != null)
-          const target = { blockIds: grass, items: new Set(['wheat_seeds']), label: 'wheat seeds' }
-          await gathering.gather(task, target, Math.min(count, 8) - have(seed))
+          await gathering.gather(task, resolveTarget(bot.registry, 'wheat_seeds'), Math.min(count, 8) - have(seed))
         }
         if (have(seed) === 0) throw missing(`I have no ${pretty(seed)}${seed === 'wheat_seeds' ? ' and found none in the grass' : ''}`)
         if (!bot.inventory.items().some((i) => i.name.endsWith('_hoe'))) await crafting.obtainItem(task, 'wooden_hoe')
@@ -369,14 +378,14 @@ export function installFarming(bot, { say, log, survival, combat, gathering, cra
     startTask(`breeding ${animal}`, async (task) => {
       const food = holdingAny(foods)
       if (!food || have(food) < 2) {
-        say(`I need 2 ${pretty(foods[0])} to breed ${animal === 'sheep' ? 'sheep' : `${animal}s`}.`)
+        say(`I need 2 ${pretty(foods[0])} to breed ${plural(animal)}.`)
         return
       }
       const ready = adults([animal])
         .filter((e) => e.position.distanceTo(me()) <= searchRadius && Date.now() - (fedAt.get(e.id) ?? 0) > breedCooldownMs)
         .sort((a, b) => a.position.distanceTo(me()) - b.position.distanceTo(me()))
       if (ready.length < 2) {
-        say(`I need two grown ${animal === 'sheep' ? 'sheep' : `${animal}s`} nearby that haven't bred in the last 5 minutes.`)
+        say(`I need two grown ${plural(animal)} nearby that haven't bred in the last 5 minutes.`)
         return
       }
       const pair = [ready[0], ready.slice(1).sort((a, b) => a.position.distanceTo(ready[0].position) - b.position.distanceTo(ready[0].position))[0]]
@@ -395,7 +404,7 @@ export function installFarming(bot, { say, log, survival, combat, gathering, cra
           return
         }
       }
-      say(`Fed two ${animal === 'sheep' ? 'sheep' : `${animal}s`} ${pretty(food)}; a baby should appear in a moment.`)
+      say(`Fed two ${plural(animal)} ${pretty(food)}; a baby should appear in a moment.`)
     }, { log, onCancel: () => bot.pathfinder.setGoal(null), onEnd: resume })
   }
 

@@ -83,6 +83,24 @@ export function layout(kind, origin, facing = 'south') {
 }
 
 /**
+ * A Nether portal frame standing at `origin` (its bottom-left frame block), 4 wide and 5 tall, along
+ * `axis` ('x' or 'z'): [{ pos, part: 'frame' | 'corner' | 'inside' }]. Corners aren't part of a
+ * portal but hold the side pillars up while building, so they're placed too, from any block.
+ */
+export function portalLayout(origin, axis = 'x') {
+  const at = (u, y) => (axis === 'x' ? origin.offset(u, y, 0) : origin.offset(0, y, u))
+  const cells = []
+  for (let u = 0; u < 4; u++) {
+    for (let y = 0; y < 5; y++) {
+      const side = u === 0 || u === 3
+      const end = y === 0 || y === 4
+      cells.push({ pos: at(u, y), part: side && end ? 'corner' : side || end ? 'frame' : 'inside' })
+    }
+  }
+  return cells
+}
+
+/**
  * Which of `remaining` (block positions) to place next: one that touches something solid, lowest
  * first, then nearest to `from`. -1 when none can be placed yet.
  */
@@ -296,6 +314,56 @@ export function installBuilding(bot, { say, log, survival, crafting, resume }) {
     }, { log, onCancel: () => bot.pathfinder.setGoal(null), onEnd: resume })
   }
 
+  // --- Nether portal ------------------------------------------------------
+  function portal({ x, y, z, label, username }) {
+    startTask('building a Nether portal', async (task) => {
+      // In front of the player (or the bot), across their line of sight so they can walk in.
+      const player = username && bot.players[username]?.entity
+      const base = groundAt(x != null ? new Vec3(x, y, z) : (player ?? bot.entity).position)
+      const facing = player ? facingFromYaw(player.yaw) : 'south'
+      const axis = facing === 'north' || facing === 'south' ? 'x' : 'z'
+      const ahead = directions[facing].scaled(x != null ? 0 : 3)
+      const origin = base.plus(ahead).offset(axis === 'x' ? -1 : 0, 0, axis === 'z' ? -1 : 0)
+      const cells = portalLayout(origin, axis)
+      if (cells.filter((c) => c.part === 'inside').some((c) => !free(c.pos))) {
+        say("There's something in the way where the portal would go; find a clear spot and ask again.")
+        return
+      }
+      const short = await stockUp(task, 'obsidian', 10)
+      if (task.cancelled) return
+      if (short) {
+        say(`I need 10 obsidian for a portal and couldn't get it: ${short}. Obsidian needs a diamond pickaxe, and forms where water meets still lava.`)
+        return
+      }
+      const noFlint = await stockUp(task, 'flint_and_steel', 1)
+      if (task.cancelled) return
+      // Corners from obsidian if there's enough for all 14, else any building block.
+      const corner = crafting.count('obsidian') >= 14 ? 'obsidian' : buildingBlock(4) ?? 'obsidian'
+      const blocks = cells.filter((c) => c.part !== 'inside').map((c) => ({ pos: c.pos, key: c.part === 'frame' ? 'obsidian' : corner }))
+      const { placed, reason } = await placeAll(task, blocks)
+      if (task.cancelled) return
+      if (reason) {
+        say(`I built part of the portal (${placed} blocks) but stopped: ${reason}.`)
+        return
+      }
+      if (noFlint) {
+        say(`The frame is up, but I couldn't get flint and steel to light it: ${noFlint}.`)
+        return
+      }
+      // Light it: fire on top of a bottom frame block, from in front of the frame, never inside it
+      // (the portal would carry the bot off to the Nether).
+      const bottom = cells.find((c) => c.part === 'frame' && c.pos.y === origin.y).pos
+      const front = bottom.offset(axis === 'x' ? 0 : -2, 0, axis === 'x' ? -2 : 0)
+      await walk(task, () => new goals.GoalBlock(front.x, front.y, front.z), () => me().floored().equals(front))
+      await bot.equip(itemFor('flint_and_steel'), 'hand')
+      await bot.activateBlock(bot.blockAt(bottom), new Vec3(0, 1, 0))
+      await sleep(1000)
+      const lit = cells.some((c) => c.part === 'inside' && bot.blockAt(c.pos)?.name === 'nether_portal')
+      const where = `(${bottom.x}, ${bottom.y}, ${bottom.z})`
+      say(lit ? `The Nether portal is lit at ${where}. Walk in and I'll follow you through.` : `I built the frame at ${where} but it didn't light. Try lighting the inside with flint and steel.`)
+    }, { log, onCancel: () => bot.pathfinder.setGoal(null), onEnd: resume })
+  }
+
   // --- Torches ------------------------------------------------------------
   function lightUp({ count: radius }) {
     radius = Math.max(4, Math.min(radius ?? 16, 32))
@@ -483,5 +551,5 @@ export function installBuilding(bot, { say, log, survival, crafting, resume }) {
     }, { log, onCancel: () => { bot.pathfinder.setGoal(null); bot.clearControlStates() } })
   }
 
-  return { build, lightUp, place, pillar, bridge }
+  return { build, lightUp, place, pillar, bridge, portal }
 }

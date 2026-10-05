@@ -142,7 +142,8 @@ A **functionality** is something the player experiences, such as "the bot follow
 | Feeds us | Eat | `hunt`, `make_item("cooked_beef")`, `harvest_crops`, `plant_crops`, `breed_animals`, `go_fishing` | — |
 | Builds a shelter before night | — | `build_shelter`, `light_up_area` | `survive-first-night` |
 | Keeps the base tidy | Drop off a full inventory | `store_items`, `take_items`, `sort_chests`, `find_item` | — |
-| Gets a full set of iron gear *(planned)* | Eat, fight back, pick up drops | `collect`, `make_item` | `iron-gear` |
+| Gets a full set of iron gear | Eat, fight back, pick up drops | `mine_for`, queued `make_item` calls | `iron-gear` |
+| Takes me to the Nether | Follow through the portal | `build_nether_portal`, `enter_portal`, `hunt` "blaze" | `nether` |
 
 The full list is in [survival-functionality-plan.md](survival-functionality-plan.md).
 
@@ -212,12 +213,14 @@ bot/
   survival.js                reflexes: eat, armor, back off when hurt, escape lava/fire/water, sleep, item recovery
   combat.js                  reflexes: fight back, defend, creepers, shield; attack and guard jobs; who may be hit
   archery.js                 bow maths: aim for arrow drop and moving targets, line of fire
-  tasks.js                   the current job (one at a time, cancellable, with progress)
+  tasks.js                   the current job (one at a time, cancellable, with progress) and the queue behind it
   gathering.js               collect and give jobs: what to break for an item, protected areas
   crafting.js                make jobs: recipe chains, smelting, placing and picking up workstations
   farming.js                 hunt, harvest, plant, breed, fish and shear jobs
   building.js                place, light, shelter/hut, bridge and pillar jobs; blueprints
   storage.js                 store, take, inspect and sort jobs; chest memory; drop-off reflex
+  travel.js                  through portals (and after the player), eye of ender
+  trading.js                 villager trades: list and buy
   walk.js                    walking with a time limit, for every walk inside a job or reflex
   test/                      unit tests (npm test), no Minecraft needed
   scripts/                   in-game checks with a second player (npm run check:*)
@@ -269,6 +272,7 @@ Chat goes through `POST /chat` (below). Besides that, the bot fetches saved plac
 //   farming:  hunt, harvest, plant, breed, fish, shear
 //   building: build, light, place, pillar, bridge
 //   storage:  store, take, inspect, sort
+//   progress: mine, portal, enter_portal, throw_eye, trades, trade
 ```
 
 When something fails, the backend answers with an error status and `{ "error": "Claude is rate limiting me. Try again in a moment." }`. The message is written for the player (`app/core/errors.py`). The bot says it in chat as `Error: ...` and writes the full details to the logs. The bot reports its own failures the same way: backend unreachable or slow, an action that throws, an unexpected crash. Repeats of the same error are muted for 10 seconds.
@@ -320,11 +324,11 @@ flowchart LR
     EVR <--> MEM
 ```
 
-1. **Task queue in the bot.** *Partly done:* one job at a time with progress, cancel and a result in chat (`bot/tasks.js`), and every job waits out reflexes and carries on. A queue of several jobs is still to come.
+1. **Task queue in the bot.** *Done:* one job at a time with progress, cancel and a result in chat, and jobs from the same reply queue behind it (`bot/tasks.js`). The first action of a reply replaces what's running; the rest wait their turn. Every job waits out reflexes and carries on.
 2. **State snapshot** ✅. Each request includes health, hunger, position, time, inventory and nearby points of interest, so the agent decides with real information instead of guessing.
 3. **Events endpoint.** The bot calls `POST /events` when something needs a decision (a task finished, it's under attack). Events cost tokens, so the bot handles anything a reflex can, and rate-limits the rest.
 4. **Memory.** Named places and chest contents are done (`services/places.py`, `services/chests.py`); the bot reports a chest each time it opens one (`POST /chests`), loads them on join (`GET /chests`) and reports chests it finds gone (`DELETE /chests`). It also remembers where it last died, in memory only. Still to come: notes about the player.
-5. **Tool groups.** The agent now has 34 tools, all sent on every request. Grouping them (movement, gathering, crafting, combat, farming, building, storage) into toolsets or capabilities would keep the list readable and could let the agent load groups only when needed, which also saves tokens.
+5. **Tool groups.** The agent now has 40 tools, all sent on every request. Grouping them (movement, gathering, crafting, combat, farming, building, storage) into toolsets or capabilities would keep the list readable and could let the agent load groups only when needed, which also saves tokens.
 
 ---
 
@@ -357,4 +361,6 @@ If you upgrade `mineflayer-pathfinder`, check whether the patch is still needed.
 - **Fights end.** The bot gives up on a target after 30 seconds or once it's 24 blocks away (a guard keeps after anything near its post), and walks back in when knocked back, since the pathfinder doesn't notice being pushed off a goal it already reached.
 - **Jobs that pick things up say when the inventory is full,** and gathering takes a full inventory to the base if there's a chest near a saved place.
 - **Placing blocks:** the bot builds bottom-up against something solid, steps clear of a block its own body overlaps (the server refuses it otherwise), and holds jump while pillaring (letting go before placing makes the server refuse the block).
-- **Hunting leaves breeders.** It skips babies and the last two adults of a kind within 32 blocks.
+- **Hunting leaves breeders.** It skips babies and the last two adults of a kind within 32 blocks (animals only; monsters don't breed).
+- **Portals only on purpose.** The pathfinder treats portal blocks as off-limits, so the bot never wanders into one; going through steps in by hand, and lighting a portal is done from in front of the frame.
+- **Mining trips are bounded:** three tries to get down to the ore's height (5 minutes each), then at most six 24-block tunnels.

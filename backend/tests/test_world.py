@@ -108,5 +108,10 @@ def test_status_says_whether_it_is_following():
     assert 'You are not following anyone.' in world.describe_status(make_state())
 
 
+def test_status_mentions_queued_jobs():
+    state = make_state(task={'description': 'making 1 iron pickaxe', 'progress': None, 'queued': 2})
+    assert 'busy making 1 iron pickaxe, with 2 more jobs queued after it.' in world.describe_status(state)
+
+
 def test_status_says_what_it_is_fighting():
     assert 'You are fighting a cave spider.' in world.describe_status(make_state(fighting='cave_spider'))

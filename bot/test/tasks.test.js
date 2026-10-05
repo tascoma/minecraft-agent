@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
-import { cancelTask, currentTask, startTask } from '../tasks.js'
+import { cancelTask, currentTask, queued, startTask } from '../tasks.js'
 
 const log = () => {}
 const tick = () => new Promise((r) => setTimeout(r, 0))
@@ -13,7 +13,7 @@ describe('tasks', () => {
     const ended = []
     startTask('getting 3 logs', (task) => new Promise((r) => { task.progress = '1/3'; finish = r }), { log, onEnd: (t) => ended.push(t.description) })
     await tick()
-    assert.deepEqual(currentTask(), { description: 'getting 3 logs', progress: '1/3' })
+    assert.deepEqual(currentTask(), { description: 'getting 3 logs', progress: '1/3', queued: 0 })
     finish()
     await tick()
     assert.equal(currentTask(), null)
@@ -48,5 +48,44 @@ describe('tasks', () => {
     await tick()
     assert.equal(currentTask(), null)
     assert.deepEqual(ended, ['broken'])
+  })
+})
+
+describe('queued tasks', () => {
+  afterEach(() => cancelTask())
+
+  it('runs queued jobs one after another, then calls onEnd once', async () => {
+    const order = []
+    const ended = []
+    const finish = {}
+    const job = (name) => (task) => new Promise((r) => { order.push(name); finish[name] = r })
+    startTask('first', job('first'), { log, onEnd: () => ended.push('first') })
+    queued(() => startTask('second', job('second'), { log, onEnd: () => ended.push('second') }))
+    await tick()
+    assert.deepEqual(currentTask(), { description: 'first', progress: null, queued: 1 })
+    finish.first()
+    await tick(); await tick()
+    assert.deepEqual(order, ['first', 'second'])
+    assert.equal(currentTask().description, 'second')
+    finish.second()
+    await tick(); await tick()
+    assert.deepEqual(ended, ['second'], 'only the last job hands back')
+    assert.equal(currentTask(), null)
+  })
+
+  it('a new command drops the queue', async () => {
+    const order = []
+    startTask('first', () => new Promise(() => order.push('first')), { log })
+    queued(() => startTask('second', () => order.push('second'), { log }))
+    cancelTask()
+    await tick(); await tick()
+    assert.deepEqual(order, ['first'])
+    assert.equal(currentTask(), null)
+  })
+
+  it('queueing with nothing running just starts the job', async () => {
+    queued(() => startTask('only', () => new Promise(() => {}), { log }))
+    await tick()
+    assert.equal(currentTask().description, 'only')
   })
 })
