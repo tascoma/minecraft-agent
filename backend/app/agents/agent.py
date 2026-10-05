@@ -133,6 +133,43 @@ def give_items(ctx: RunContext[ChatDeps], item: str, count: int | None = None) -
 
 
 @agent.tool
+def attack(ctx: RunContext[ChatDeps], target: str | None = None) -> str:
+    """Attack a mob, e.g. "zombie", "skeleton", "cow". Leave target out for the nearest hostile mob.
+
+    Use it whenever the player asks you to kill or hunt something, including farm animals for food
+    (cows, pigs, chickens, sheep). You already fight back and defend the player by yourself. The bot
+    refuses players, villagers, golems and pets on its own, and backs away from creepers.
+    """
+    ctx.deps.actions.append(BotAction(type='attack', target=target))
+    what = f'the {target}' if target else 'the nearest hostile mob'
+    return f'Going after {what}. The bot will say in chat how it went, so do not claim it is dead.'
+
+
+@agent.tool
+def guard_area(ctx: RunContext[ChatDeps], place: str | None = None) -> str:
+    """Stand guard at a saved place (e.g. "home", "base") or, with no place, where the player is standing.
+
+    You fight hostile mobs that come within 12 blocks and go back to your post after each fight,
+    until the player tells you to do something else.
+    """
+    if place:
+        saved = ctx.deps.places.get(place)
+        if not saved:
+            known = ', '.join(p.name for p in ctx.deps.places.all()) or 'none yet'
+            return f'No saved place called "{place}". Saved places: {known}.'
+        if ctx.deps.state and saved.dimension != ctx.deps.state.dimension:
+            return f'{saved.name} is in {world.describe_dimension(saved.dimension)}, not here.'
+        ctx.deps.actions.append(BotAction(type='guard', x=saved.x, y=saved.y, z=saved.z, label=saved.name))
+        return f'Heading to guard {saved.name}. The bot will say in chat when it is on guard.'
+    state = ctx.deps.state
+    if not state:
+        return NO_STATE
+    pos = state.player_position or state.position
+    ctx.deps.actions.append(BotAction(type='guard', x=pos.x, y=pos.y, z=pos.z))
+    return f'Guarding {world.format_position(pos)}. The bot will say in chat when it is on guard.'
+
+
+@agent.tool
 def go_to(ctx: RunContext[ChatDeps], x: int, z: int, y: int | None = None) -> str:
     """Walk to coordinates and wait there. Leave y out if the player only gave x and z."""
     ctx.deps.actions.append(BotAction(type='goto', x=x, y=y, z=z))

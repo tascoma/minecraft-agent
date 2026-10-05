@@ -53,7 +53,7 @@ def test_chat_rejects_malformed_request_with_message():
 
 FOLLOW = {
     'type': 'follow', 'username': 'Steve', 'x': None, 'y': None, 'z': None, 'label': None,
-    'item': None, 'count': None,
+    'item': None, 'count': None, 'target': None,
 }
 
 

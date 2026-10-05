@@ -72,6 +72,8 @@ class BotState(BaseModel):
     # Set for 5 minutes after the bot dies, while its dropped items can still be picked up.
     last_death: Death | None = None
     task: Task | None = None
+    # The mob the bot is fighting, like 'zombie'.
+    fighting: str | None = None
 
 
 class ChatRequest(BaseModel):
@@ -95,10 +97,11 @@ class BotAction(BaseModel):
 
     follow/come/teleport: `username` is the player. goto: `x`, `z`, optional `y`, and an optional `label` the bot
     uses when it reports arriving ("Made it to home."). collect and make: `item` and `count`. give: `username`,
-    `item`, and `count` (None for all of it).
+    `item`, and `count` (None for all of it). attack: `target`, a mob name like 'zombie' (None for the nearest hostile). guard: `x`, `y`, `z`
+    and an optional `label`.
     """
 
-    type: Literal['follow', 'stay', 'come', 'goto', 'teleport', 'recover', 'collect', 'give', 'make']
+    type: Literal['follow', 'stay', 'come', 'goto', 'teleport', 'recover', 'collect', 'give', 'make', 'attack', 'guard']
     username: str | None = None
     x: int | None = None
     y: int | None = None
@@ -106,6 +109,7 @@ class BotAction(BaseModel):
     label: str | None = None
     item: str | None = None
     count: int | None = None
+    target: str | None = None
 
 
 class ChatResponse(BaseModel):

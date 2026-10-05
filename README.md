@@ -58,6 +58,7 @@ cd bot
 npm run check:survival     # commands ignored, armor, backing off, death and item recovery
 npm run check:gathering    # logs, pickaxe needed, progress, stop, giving items
 npm run check:crafting     # stone pickaxe from nothing, torches, iron ingots with a furnace
+npm run check:combat       # fights back, defends you, backs away from creepers, kills on request, spares villagers, bow, shield, guarding (costs you half a heart)
 ```
 
 ## Roadmap
@@ -70,5 +71,6 @@ The full list is in [docs/survival-functionality-plan.md](docs/survival-function
 - [x] Staying alive: eat, wear armor, back off when hurt, sleep, get items back after dying (Phase 3)
 - [x] Gathering: chop trees, mine stone and ores, dig sand and dirt, hand items over, never near your base (Phase 4)
 - [x] Crafting and smelting: "make a stone pickaxe" from nothing, torches, iron ingots; gathers what's missing (Phase 5)
-- [ ] Combat, farming, building, base and storage (Phases 6–9)
+- [x] Combat: fight back, defend you, back away from creepers, attack on request, never hit players, villagers or pets ; guard a place, shoot with a bow, block arrows with a shield (Phase 6)
+- [ ] Farming, building, base and storage (Phases 7–9)
 - [ ] Long-term goals and companionship (Phases 10–11)

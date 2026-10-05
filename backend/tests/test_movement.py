@@ -139,3 +139,26 @@ def test_places_are_kept_per_world(tmp_path, monkeypatch):
     assert places.world_dir_name('localhost:25565') != places.world_dir_name('localhost/25565')
     assert '/' not in places.world_dir_name('../x/y')
     places.get_place_store.cache_clear()
+
+
+def test_attack_queues_an_action(store):
+    from app.agents.agent import attack
+
+    c = ctx(store)
+    attack(c, target='zombie')
+    attack(c)
+    assert c.deps.actions == [BotAction(type='attack', target='zombie'), BotAction(type='attack')]
+
+
+def test_guard_a_saved_place_or_where_the_player_is(store):
+    from app.agents.agent import guard_area
+
+    store.save(Place(name='home', x=1, y=64, z=2, dimension='overworld'))
+    c = ctx(store, player_position={'x': 5, 'y': 70, 'z': 6})
+    guard_area(c, place='Home')
+    guard_area(c)
+    assert 'No saved place' in guard_area(c, place='castle')
+    assert c.deps.actions == [
+        BotAction(type='guard', x=1, y=64, z=2, label='home'),
+        BotAction(type='guard', x=5, y=70, z=6),
+    ]

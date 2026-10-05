@@ -15,11 +15,12 @@ joinTester(async ({ companion: bot, say, command, waitFor, check, armor }) => {
 
   command(`/damage ${bot} 13`)
   await sleep(500)
-  command(`/execute at ${bot} run summon husk ~4 ~1 ~`)
+  command(`/execute at ${bot} run summon husk ~4 ~1 ~ {Tags:["survival_check"]}`)
   const retreat = await waitFor(/Backing off|Running to you/, 8000)
   check('backs off when hurt with a mob near', retreat !== null, retreat)
   await sleep(3000)
-  command('/kill @e[type=husk]')
+  // Only the husk this check summoned, never the world's own.
+  command('/kill @e[tag=survival_check]')
   await sleep(2000)
 
   command(`/give ${bot} cobblestone 16`)

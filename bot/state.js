@@ -1,4 +1,5 @@
 // Builds the snapshot of the bot's situation that is sent to the backend with every chat.
+import { currentFight } from './combat.js'
 import { lastDeathInfo } from './survival.js'
 import { currentTask } from './tasks.js'
 import { currentWorldId } from './world.js'
@@ -91,5 +92,7 @@ export function snapshot(bot, speaker) {
     last_death: deathSnapshot(),
     // The job the bot is doing, like {description: "getting 20 cobblestone", progress: "12/20"}.
     task: currentTask(),
+    // The mob the bot is fighting, like "zombie"; null when not fighting.
+    fighting: currentFight(),
   }
 }

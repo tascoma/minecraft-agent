@@ -101,3 +101,7 @@ def test_tools_in_status():
 def test_status_names_the_world():
     assert 'World id: seed-ab12 ' in world.describe_status(make_state(world_id='seed-ab12'))
     assert 'World id' not in world.describe_status(make_state())
+
+
+def test_status_says_what_it_is_fighting():
+    assert 'You are fighting a cave spider.' in world.describe_status(make_state(fighting='cave_spider'))

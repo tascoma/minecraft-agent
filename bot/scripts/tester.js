@@ -15,6 +15,9 @@ export function joinTester(run) {
   })
   const companion = process.env.MC_USERNAME ?? 'Claude'
   let failures = 0
+  // Names of entities that appeared since the last clearSeen(), e.g. 'arrow'.
+  const seen = new Set()
+  t.on('entitySpawn', (e) => seen.add(e.name))
 
   t.on('chat', (sender, message) => { if (sender === companion) console.log(`${stamp()} <${companion}> ${message}`) })
   t.on('messagestr', (text, position) => { if (position === 'system' && !text.startsWith('<')) console.log(`${stamp()} [server] ${text}`) })
@@ -37,6 +40,51 @@ export function joinTester(run) {
     check(name, ok, detail) {
       console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? `: ${detail}` : ''}`)
       if (!ok) failures++
+    },
+    // An offset like "~3 ~ ~-1" about `distance` blocks from the companion (up to 2 nearer or farther)
+    // with room for a mob to stand (two free blocks over solid ground), or null. Mobs summoned into
+    // walls suffocate.
+    openSpot(distance) {
+      const me = t.players[companion]?.entity?.position.floored()
+      if (!me) return null
+      const free = (pos) => t.blockAt(pos)?.boundingBox === 'empty'
+      const tries = [distance, distance - 1, distance + 1, distance - 2, distance + 2].filter((d) => d >= 2)
+      for (const d of tries) {
+        for (let i = 0; i < 16; i++) {
+          const angle = (i / 16) * 2 * Math.PI
+          const dx = Math.round(Math.cos(angle) * d)
+          const dz = Math.round(Math.sin(angle) * d)
+          const feet = me.offset(dx, 0, dz)
+          if (free(feet) && free(feet.offset(0, 1, 0)) && !free(feet.offset(0, -1, 0))) return `~${dx} ~ ~${dz}`
+        }
+      }
+      return null
+    },
+    seen: (name) => seen.has(name),
+    clearSeen: () => seen.clear(),
+    // The companion's position as the tester sees it.
+    position: () => t.players[companion]?.entity?.position.clone() ?? null,
+    // True while the companion holds up a shield or draws a bow (the "hand active" flag).
+    usingItem: () => Boolean((t.players[companion]?.entity?.metadata?.[8] ?? 0) & 0x01),
+    // What the companion holds in its off-hand.
+    offHand: () => t.players[companion]?.entity?.equipment?.[1]?.name ?? null,
+    // Players near the companion other than the companion bot and the tester.
+    playersNear(range = 16) {
+      const me = t.players[companion]?.entity
+      return Object.values(t.players)
+        .filter((p) => p.username !== companion && p.username !== t.username && p.entity && me && p.entity.position.distanceTo(me.position) <= range)
+        .map((p) => p.username)
+    },
+    // How many of a mob are alive within `range` blocks of the companion.
+    count(name, range = 24) {
+      const me = t.players[companion]?.entity
+      return me ? Object.values(t.entities).filter((e) => e.name === name && e.position.distanceTo(me.position) <= range).length : 0
+    },
+    // How far a mob is from the companion, or null if there isn't one.
+    distanceTo(name) {
+      const me = t.players[companion]?.entity
+      const mob = me && t.nearestEntity((e) => e.name === name)
+      return mob ? mob.position.distanceTo(me.position) : null
     },
     // Armor the tester can see on the companion: boots, leggings, chestplate, helmet.
     armor: () => (t.players[companion]?.entity?.equipment ?? []).slice(2, 6).filter(Boolean).map((i) => i.name),

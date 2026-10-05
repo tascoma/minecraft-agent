@@ -114,19 +114,19 @@ Tested in game (`npm run check:crafting`): a stone pickaxe from an empty invento
 
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
-| Fight back when attacked | Reflex | `mineflayer-pvp` | 🔲 |
-| Defend the player from hostile mobs | Reflex | `mineflayer-pvp` + `entityHurt` | 🔲 |
-| Attack a target on request ("kill that zombie") | Tool | `mineflayer-pvp` | 🔲 |
-| Guard an area or the base | Tool | patrol + `mineflayer-pvp` | 🔲 |
-| Back away from creepers instead of meleeing them | Reflex | creeper distance check | 🔲 |
-| Use a bow and shield | Reflex | `bot.activateItem`, `mineflayer-hawkeye` | 🔲 |
-| Never hit the player, pets or villagers | Reflex | target filter | 🔲 |
+| Fight back when attacked | Reflex | `bot/combat.js`, attacker from `entityHurt` | ✅ |
+| Defend the player from hostile mobs | Reflex | `bot/combat.js` | ✅ |
+| Attack a target on request ("kill that zombie") | Tool | `attack`, `bot/combat.js` | ✅ |
+| Guard an area or the base | Tool | `guard_area`, guard job in `bot/combat.js` | ✅ |
+| Back away from creepers instead of meleeing them | Reflex | creeper distance check | ✅ |
+| Use a bow and shield | Reflex | `bot/archery.js` (aim, line of fire), `bot.activateItem` | ✅ |
+| Never hit the player, pets or villagers | Reflex | target filter (`canAttack` in `bot/combat.js`) | ✅ |
 
 ## Phase 7: Food and farming
 
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
-| Hunt animals for food (cows, pigs, chickens, sheep) | Tool | `mineflayer-pvp` + collect drops | 🔲 |
+| Hunt animals for food (cows, pigs, chickens, sheep) | Tool | `attack` (Phase 6) + collect drops | 🔲 *Kills on request; doesn't pick up the drops yet* |
 | Cook raw meat | Tool | furnace (Phase 5) | 🔲 |
 | Harvest and replant crops (wheat, carrots, potatoes) | Tool | `bot.dig` + `bot.placeBlock` seeds | 🔲 |
 | Start a farm: till soil near water and plant | Tool + skill | hoe + `bot.activateBlock` | 🔲 |
@@ -149,7 +149,7 @@ Tested in game (`npm run check:crafting`): a stone pickaxe from an empty invento
 
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
-| Remember where home is | Memory | saved waypoint | 🔲 |
+| Remember where home is | Memory | saved places, per world | ✅ |
 | Store items in chests ("put away the cobblestone") | Tool | `bot.openContainer` | 🔲 |
 | Take items from chests ("grab iron from the chest") | Tool | `bot.openContainer` | 🔲 |
 | Keep a record of what's in each chest | Memory | container snapshots | 🔲 |
@@ -176,9 +176,9 @@ Multi-step goals that combine everything above. The agent plans them with skills
 |---|---|---|
 | Remember the last few things said, so follow-ups like "get it" work | Memory | ✅ |
 | Remember things about the player and past sessions (preferences, base locations, what happened) | Memory | 🔲 |
-| Give useful tips without being asked, at a sensible rate ("night in 1 minute") | Reflex → chat | 🔲 |
+| Give useful tips without being asked, at a sensible rate ("night in 1 minute") | Reflex → chat | 🔲 *Night and low-health warnings only (`bot/alerts.js`)* |
 | Split up work ("you mine, I'll build") and report back when done | Tool + task system | 🔲 |
-| Tell the player what it's currently doing on request | Tool | 🔲 |
+| Tell the player what it's currently doing on request | Tool | ✅ (status line: job, progress, fight) |
 | Keep a token budget per hour so idle chatter can't run up costs | Backend | 🔲 |
 
 ---
@@ -196,7 +196,7 @@ Phases 4 onward need these before they work well:
 ## Suggested order
 
 1. ~~Phase 1 (world awareness) and the task system.~~ Done; the task system runs one job at a time.
-2. ~~Phase 3 (staying alive)~~ done. Phase 6 reflexes (fighting back) are next: night mobs still kill it mid-job.
+2. ~~Phase 3 (staying alive)~~ done. ~~Phase 6 reflexes (fighting back)~~ done, using a small attack loop instead of `mineflayer-pvp` (unmaintained since 2021). Guarding, the bow and the shield are done too, so Phase 6 is complete.
 3. ~~Phases 4 and 5 (gathering, crafting)~~ done. The bot can now go from nothing to stone tools, torches and iron ingots by itself.
 4. Phases 7–9 (farming, building, base).
 5. Phases 10–11 (long-term goals and companionship).

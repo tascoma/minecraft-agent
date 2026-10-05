@@ -90,6 +90,8 @@ def describe_status(state: BotState) -> str:
         f'{describe_time(state.time_of_day)}, {describe_weather(state)}, holding {held}, '
         f'tools: {describe_tools(state)}.'
     )
+    if state.fighting:
+        status += f' You are fighting a {state.fighting.replace("_", " ")}.'
     if task := state.task:
         progress = f' ({task.progress})' if task.progress else ''
         status += f' You are busy {task.description}{progress}.'

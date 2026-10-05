@@ -16,13 +16,13 @@ The words this project uses for its own building blocks.
 
 **Action executor**: The part of `bot/index.js` (`runAction`) that takes actions from the backend and performs them with Mineflayer. Logs a warning for any action type it doesn't recognize.
 
-**Action tool**: A tool that changes the world (`follow_player`, `stay_here`, `come_here`, `go_to`, `go_to_place`, `teleport_to_player`, `recover_items`, `collect`, `give_items`, `make_item`). It doesn't touch Minecraft itself; it adds a `BotAction` for the bot to carry out. Compare *query tool*.
+**Action tool**: A tool that changes the world (`follow_player`, `stay_here`, `come_here`, `go_to`, `go_to_place`, `teleport_to_player`, `recover_items`, `collect`, `give_items`, `make_item`, `attack`, `guard_area`). It doesn't touch Minecraft itself; it adds a `BotAction` for the bot to carry out. Compare *query tool*.
 
 **Backend**: The Python process in `backend/`. The bot's "brain": it receives chat, runs the agent, and replies. It's the only part that costs tokens.
 
 **Bot**: The Node process in `bot/`. The bot's "body": a Minecraft player controlled by code, using Mineflayer. It moves, senses and acts, and never costs tokens. Also refers to the in-game player itself, named **Claude**.
 
-**BotAction**: The data shape of an action, defined in `backend/app/schema/chat.py`: a `type` (`follow`, `stay`, `come`, `goto`, `teleport`, `recover`, `collect`, `give` or `make`), plus `username` for actions aimed at a player, `x`/`y`/`z`/`label` for `goto`, and `item`/`count` for gathering and making.
+**BotAction**: The data shape of an action, defined in `backend/app/schema/chat.py`: a `type` (`follow`, `stay`, `come`, `goto`, `teleport`, `recover`, `collect`, `give`, `make`, `attack` or `guard`), plus `username` for actions aimed at a player, `x`/`y`/`z`/`label` for `goto` and `guard`, `item`/`count` for gathering and making, and `target` (a mob name) for `attack`.
 
 **ChatDeps**: The per-request deps object for the agent, in `backend/app/agents/agent.py`. Holds who is talking, the bot's state snapshot, the saved places, and the list of actions tools have recorded during the run.
 
@@ -33,6 +33,10 @@ The words this project uses for its own building blocks.
 **Functionality**: Something the player experiences, like "the bot follows me". Not a code unit: it's built from some combination of reflexes, tools and skills.
 
 **Job (task)**: Something that takes a while, like "get 20 cobblestone" or handing items over. One runs at a time (`bot/tasks.js`); "stop", any new command, or dying cancels it. The bot announces progress and the result in chat, and the job is in the state snapshot.
+
+**Guard job**: What `guard_area` starts: the bot stands at a spot (where the player is, or a saved place), fights hostile mobs within 12 blocks of it, and walks back after each fight, until the player gives another command (`guard` in `bot/combat.js`).
+
+**Line of fire**: The path an arrow would take, plus a few blocks past the target. The bot won't shoot if a player, villager or pet is within 2 blocks of it (`someoneInTheWay` in `bot/archery.js`).
 
 **Man-made block**: A block a player probably placed: planks, glass, bricks, doors, chests, beds, torches, farmland, crops and so on (`isManMade` in `bot/movements.js`). The bot never breaks these, even while gathering.
 
@@ -46,9 +50,9 @@ The words this project uses for its own building blocks.
 
 **Protected area**: The 16 blocks (horizontally) around every saved place. The bot never digs or places blocks there.
 
-**Reflex**: Behavior the bot runs by itself, triggered by game events or timers, with no backend call and no tokens. Following the player is a reflex, and so are the survival reflexes in `bot/survival.js` (eat, armor, back off, escape lava and water, sleep). Used for anything time-critical, frequent, or obvious. A command from the player cancels a running reflex.
+**Reflex**: Behavior the bot runs by itself, triggered by game events or timers, with no backend call and no tokens. Following the player is a reflex, and so are the survival reflexes in `bot/survival.js` (eat, armor, back off, escape lava and water, sleep) and the combat reflexes in `bot/combat.js` (fight back, defend the companion, back away from creepers). Used for anything time-critical, frequent, or obvious. A command from the player cancels a running reflex.
 
-**State snapshot**: The bot's current situation, sent with every chat message: world id, health, food, position, dimension, time, weather, inventory, nearby blocks and entities, where the player is, and where the bot last died. Built by `bot/state.js`, defined as `BotState` in the schema.
+**State snapshot**: The bot's current situation, sent with every chat message: world id, health, food, position, dimension, time, weather, inventory, nearby blocks and entities, where the player is, where the bot last died, its current job and what it's fighting. Built by `bot/state.js`, defined as `BotState` in the schema.
 
 **Skill**: A `SKILL.md` playbook under `skills/` describing how to do something multi-step. The agent only sees each skill's name and description until it decides to load one. Skills are knowledge; tools are actions.
 
@@ -126,7 +130,7 @@ The words this project uses for its own building blocks.
 
 **Player chat**: A chat message typed by a player, which Minecraft sends with the sender's UUID. The bot only answers these, not server or command messages.
 
-**Plugin**: An add-on that extends Mineflayer, loaded with `bot.loadPlugin(...)`. In use: `mineflayer-pathfinder`, `mineflayer-auto-eat`, `mineflayer-armor-manager` and `mineflayer-tool`. Planned: `mineflayer-pvp`. (`mineflayer-collectblock` was tried and dropped: it could wait forever for an item drop.)
+**Plugin**: An add-on that extends Mineflayer, loaded with `bot.loadPlugin(...)`. In use: `mineflayer-pathfinder`, `mineflayer-auto-eat`, `mineflayer-armor-manager` and `mineflayer-tool`. Combat doesn't use `mineflayer-pvp` (unmaintained since 2021); `bot/combat.js` has its own short attack loop. (`mineflayer-collectblock` was tried and dropped: it could wait forever for an item drop.)
 
 **Spawn**: The moment the bot appears in the world after connecting, or after dying. The bot sets up movement and starts following only after spawn.
 

@@ -1,9 +1,9 @@
 // Reflexes that warn the player in chat about things that need attention. No backend call, no tokens.
+// Creepers are handled (and announced) by combat.js.
 
 // Minimum time between two alerts of the same kind, in milliseconds.
 const cooldownMs = 30_000
 const lowHealth = 8
-const creeperRange = 8
 // Night mobs start spawning around 13000 ticks; 11800 gives about a minute of warning.
 const duskTick = 11800
 
@@ -32,13 +32,4 @@ export function installAlerts(bot, say) {
       alert('dusk', "It's getting dark, night in about a minute.")
     } else if (t < duskTick) warnedDusk = false
   })
-
-  const creeperCheck = setInterval(() => {
-    if (!bot.entity) return
-    const creeper = bot.nearestEntity(
-      (e) => e.name === 'creeper' && e.position.distanceTo(bot.entity.position) <= creeperRange,
-    )
-    if (creeper) alert('creeper', 'Creeper nearby!')
-  }, 1000)
-  bot.once('end', () => clearInterval(creeperCheck))
 }
