@@ -16,13 +16,13 @@ The words this project uses for its own building blocks.
 
 **Action executor**: The part of `bot/index.js` (`runAction`) that takes actions from the backend and performs them with Mineflayer. Logs a warning for any action type it doesn't recognize.
 
-**Action tool**: A tool that changes the world (`follow_player`, `stay_here`, `come_here`, `go_to`, `go_to_place`, `teleport_to_player`, `recover_items`, `collect`, `give_items`, `make_item`, `attack`, `guard_area`, `hunt`, `harvest_crops`, `plant_crops`, `breed_animals`, `go_fishing`, `shear_sheep`). It doesn't touch Minecraft itself; it adds a `BotAction` for the bot to carry out. Compare *query tool*.
+**Action tool**: A tool that changes the world (`follow_player`, `stay_here`, `come_here`, `go_to`, `go_to_place`, `teleport_to_player`, `recover_items`, `collect`, `give_items`, `make_item`, `attack`, `guard_area`, `hunt`, `harvest_crops`, `plant_crops`, `breed_animals`, `go_fishing`, `shear_sheep`, `build_shelter`, `place_block`, `light_up_area`, `pillar_up`, `bridge`). It doesn't touch Minecraft itself; it adds a `BotAction` for the bot to carry out. Compare *query tool*.
 
 **Backend**: The Python process in `backend/`. The bot's "brain": it receives chat, runs the agent, and replies. It's the only part that costs tokens.
 
 **Bot**: The Node process in `bot/`. The bot's "body": a Minecraft player controlled by code, using Mineflayer. It moves, senses and acts, and never costs tokens. Also refers to the in-game player itself, named **Claude**.
 
-**BotAction**: The data shape of an action, defined in `backend/app/schema/chat.py`: a `type` (`follow`, `stay`, `come`, `goto`, `teleport`, `recover`, `collect`, `give`, `make`, `attack`, `guard`, `hunt`, `harvest`, `plant`, `breed`, `fish` or `shear`), plus `username` for actions aimed at a player, `x`/`y`/`z`/`label` for `goto` and `guard`, `item`/`count` for gathering and making, `target` (a mob, animal or crop) for `attack` and the farming jobs, and `count` for how many.
+**BotAction**: The data shape of an action, defined in `backend/app/schema/chat.py`: a `type` (`follow`, `stay`, `come`, `goto`, `teleport`, `recover`, `collect`, `give`, `make`, `attack`, `guard`, `hunt`, `harvest`, `plant`, `breed`, `fish`, `shear`, `build`, `light`, `place`, `pillar` or `bridge`), plus `username` for actions aimed at a player, `x`/`y`/`z`/`label` for `goto` and `guard`, `item`/`count` for gathering and making, `target` (a mob, animal or crop) for `attack` and the farming jobs, and `count` for how many.
 
 **ChatDeps**: The per-request deps object for the agent, in `backend/app/agents/agent.py`. Holds who is talking, the bot's state snapshot, the saved places, and the list of actions tools have recorded during the run.
 
@@ -35,6 +35,10 @@ The words this project uses for its own building blocks.
 **Job (task)**: Something that takes a while, like "get 20 cobblestone" or handing items over. One runs at a time (`bot/tasks.js`); "stop", any new command, or dying cancels it. The bot announces progress and the result in chat, and the job is in the state snapshot.
 
 **Guard job**: What `guard_area` starts: the bot stands at a spot (where the player is, or a saved place), fights hostile mobs within 12 blocks of it, and walks back after each fight, until the player gives another command (`guard` in `bot/combat.js`).
+
+**Building jobs**: Placing a block, lighting an area, building a shelter or hut, bridging and pillaring (`bot/building.js`). They share one placer that builds bottom-up against something solid, steps out of the way of its own blocks, and gathers or crafts materials it's short of.
+
+**Blueprint**: A small fixed building in `bot/building.js`: "shelter" (3x3 inside, 2-high walls) or "hut" (5x5 inside, 3-high walls), each with a roof and a door facing the player.
 
 **Farming jobs**: Hunting, harvesting, planting, breeding, fishing and shearing (`bot/farming.js`). Each runs as a job, waits out reflexes (a fight, eating) and carries on, and says up front if the inventory is full. Hunting skips babies and leaves the last two adults of a kind so they can still breed.
 

@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import mineflayer from 'mineflayer'
 import pathfinderPkg from 'mineflayer-pathfinder'
 import { installAlerts } from './alerts.js'
+import { installBuilding } from './building.js'
 import { installCombat } from './combat.js'
 import { installCrafting } from './crafting.js'
 import { installFarming } from './farming.js'
@@ -131,6 +132,7 @@ let gathering = null
 let crafting = null
 let combat = null
 let farming = null
+let building = null
 
 function updateFollowGoal() {
   // A reflex (backing off, sleeping, fetching items) or a job (gathering) is driving; it resumes
@@ -247,6 +249,11 @@ function runAction(action) {
     else if (action.type === 'breed') farming.breed(action)
     else if (action.type === 'fish') farming.fish(action)
     else if (action.type === 'shear') farming.shear(action)
+    else if (action.type === 'build') building.build(action)
+    else if (action.type === 'light') building.lightUp(action)
+    else if (action.type === 'place') building.place(action)
+    else if (action.type === 'pillar') building.pillar(action)
+    else if (action.type === 'bridge') building.bridge(action)
     else {
       log('WARN', `unknown action: ${JSON.stringify(action)}`)
       reportError(`I don't know how to do "${action.type}" yet. Is the bot out of date?`)
@@ -294,6 +301,7 @@ function connect() {
     gathering = installGathering(bot, { say, log, survival, resume })
     crafting = installCrafting(bot, { say, log, gathering, resume })
     farming = installFarming(bot, { say, log, survival, combat, gathering, crafting, resume })
+    building = installBuilding(bot, { say, log, survival, crafting, resume })
   })
 
   bot.on('entitySpawn', (entity) => {

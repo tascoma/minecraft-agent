@@ -102,7 +102,7 @@ joinTester(async ({ give, companion: bot, say, command, waitFor, check, count, d
 
   // Bow: a still husk out of reach hits the bot, which shoots it instead of walking over.
   give('bow')
-  give('arrow', 32)
+  give('arrow', 16)
   await sleep(1500)
   clearSeen()
   if (await summon('husk', 12, 'NoAI:1b')) {

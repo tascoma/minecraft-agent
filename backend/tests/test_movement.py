@@ -182,3 +182,27 @@ def test_farming_tools_queue_actions(store):
         BotAction(type='fish', count=2),
         BotAction(type='shear', count=64),
     ]
+
+
+def test_building_tools_queue_actions(store):
+    from app.agents.agent import bridge, build_shelter, light_up_area, pillar_up, place_block
+
+    store.save(Place(name='home', x=1, y=64, z=2, dimension='overworld'))
+    c = ctx(store)
+    build_shelter(c)
+    build_shelter(c, kind='small house', material='wood', place='home')
+    place_block(c, item='chest', place='home')
+    place_block(c, item='torch')
+    light_up_area(c, radius=12)
+    pillar_up(c, height=3)
+    bridge(c, length=8, direction='east')
+    assert 'No saved place' in place_block(c, item='chest', place='castle')
+    assert c.deps.actions == [
+        BotAction(type='build', target='shelter', username='Steve', x=10, y=64, z=-3),
+        BotAction(type='build', target='hut', item='wood', username='Steve', x=1, y=64, z=2, label='home'),
+        BotAction(type='place', item='chest', username='Steve', x=1, y=64, z=2, label='home'),
+        BotAction(type='place', item='torch', username='Steve'),
+        BotAction(type='light', count=12),
+        BotAction(type='pillar', count=3),
+        BotAction(type='bridge', target='east', count=8, username='Steve'),
+    ]

@@ -2,6 +2,7 @@
 // and watches what the companion bot says. Needs the bot running and a world with cheats on.
 // Every check sets the time to day first.
 import mineflayer from 'mineflayer'
+import { isManMade } from '../movements.js'
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const stamp = () => new Date().toISOString().slice(11, 19)
@@ -17,7 +18,9 @@ export function joinTester(run) {
   let failures = 0
   // Names of entities that appeared since the last clearSeen(), e.g. 'arrow'.
   const seen = new Set()
-  // Items given to the companion, taken back when the check ends so repeated runs don't fill its inventory.
+  // Tools and armor given to the companion, taken back when the check ends so repeated runs don't fill
+  // its inventory. Stackable items (blocks, arrows, food) are left: /clear can't tell given cobblestone
+  // from the bot's own, and would take its own once the given ones are used up.
   const given = []
   t.on('entitySpawn', (e) => seen.add(e.name))
 
@@ -30,9 +33,9 @@ export function joinTester(run) {
     client: t,
     // Chat as ClaudeTester; the companion treats it like any player's message.
     say(message) { console.log(`${stamp()} <ClaudeTester> ${message}`); t.chat(message) },
-    // Give the companion an item for this check; whatever is left of it is cleared at the end.
+    // Give the companion an item for this check (tools and armor are taken back at the end).
     give(item, count = 1) {
-      given.push([item, count])
+      if (t.registry.itemsByName[item]?.stackSize === 1) given.push([item, count])
       helpers.command(`/give ${companion} ${item} ${count}`)
     },
     command(command) { console.log(`${stamp()} > ${command}`); t.chat(command) },
@@ -77,6 +80,69 @@ export function joinTester(run) {
     usingItem: () => Boolean((t.players[companion]?.entity?.metadata?.[8] ?? 0) & 0x01),
     // What the companion holds in its off-hand.
     offHand: () => t.players[companion]?.entity?.equipment?.[1]?.name ?? null,
+    // A patch of natural ground near the companion (within 40 blocks) for building on: cells
+    // within `radius` of the centre with grass or dirt underfoot and `height` blocks of air above,
+    // and nothing built nearby. Returns { center, level }: level is true when some cells aren't open
+    // and the check should flatten the patch first (saveArea before, and restore after). Null if
+    // nothing is even mostly open.
+    findPatch({ radius, height = 2 }) {
+      const start = t.players[companion]?.entity?.position.floored()
+      if (!start) return null
+      const natural = (name) => ['grass_block', 'dirt', 'podzol', 'coarse_dirt'].includes(name)
+      const open = (p) => {
+        if (!natural(t.blockAt(p.offset(0, -1, 0))?.name)) return false
+        for (let y = 0; y < height; y++) if (t.blockAt(p.offset(0, y, 0))?.boundingBox !== 'empty') return false
+        return true
+      }
+      const untouched = (c) => {
+        for (let x = -radius - 2; x <= radius + 2; x++) {
+          for (let z = -radius - 2; z <= radius + 2; z++) {
+            for (let y = -2; y <= height; y++) if (isManMade(t.blockAt(c.offset(x, y, z))?.name ?? 'air')) return false
+          }
+        }
+        return true
+      }
+      const cells = (2 * radius + 1) ** 2
+      let best = null
+      for (let dx = -40; dx <= 40; dx += 2) {
+        for (let dz = -40; dz <= 40; dz += 2) {
+          for (let dy = -4; dy <= 4; dy++) {
+            const c = start.offset(dx, dy, dz)
+            let good = 0
+            for (let x = -radius; x <= radius; x++) for (let z = -radius; z <= radius; z++) if (open(c.offset(x, 0, z))) good++
+            const near = Math.hypot(dx, dz)
+            if (good < cells * 0.8 || (best && (good < best.good || (good === best.good && near >= best.near)))) continue
+            if (untouched(c)) best = { center: c, good, near }
+          }
+        }
+      }
+      return best && { center: best.center, level: best.good < cells }
+    },
+    // Record every block (with its state) in a box around `center`; the returned function puts them
+    // all back exactly and clears dropped items there.
+    saveArea(center, radius, down, up) {
+      const saved = []
+      const state = (b) => {
+        if (!b) return 'air'
+        const props = Object.entries(b.getProperties())
+        return props.length ? `${b.name}[${props.map(([k, v]) => `${k}=${v}`).join(',')}]` : b.name
+      }
+      for (let x = -radius; x <= radius; x++) {
+        for (let z = -radius; z <= radius; z++) {
+          for (let y = -down; y <= up; y++) {
+            const p = center.offset(x, y, z)
+            saved.push([p, state(t.blockAt(p))])
+          }
+        }
+      }
+      return async () => {
+        // Top down, so nothing placed on top of a changed block pops off as an item first.
+        for (const [p, s] of [...saved].reverse()) {
+          if (state(t.blockAt(p)) !== s) { helpers.command(`/setblock ${p.x} ${p.y} ${p.z} ${s}`); await sleep(60) }
+        }
+        helpers.command(`/kill @e[type=item,x=${center.x},y=${center.y},z=${center.z},distance=..${radius + 3}]`)
+      }
+    },
     // Players near the companion other than the companion bot and the tester.
     playersNear(range = 16) {
       const me = t.players[companion]?.entity

@@ -99,11 +99,14 @@ class BotAction(BaseModel):
     uses when it reports arriving ("Made it to home."). collect and make: `item` and `count`. give: `username`,
     `item`, and `count` (None for all of it). attack: `target`, a mob name like 'zombie' (None for the nearest hostile). guard: `x`, `y`, `z`
     and an optional `label`. hunt, plant: `target` (an animal or crop) and `count`. harvest, breed: `target`.
-    fish, shear: `count`.
+    fish, shear: `count`. build: `target` ('shelter' or 'hut'), optional `item` (material), optional `x`/`y`/`z`/`label`.
+    light: `count` (radius). place: `item`, optional `x`/`y`/`z`/`label`. pillar: `count`. bridge: `target`
+    (a direction, or None for where the player faces) and `count`. build, place and bridge also carry `username`.
     """
 
     type: Literal['follow', 'stay', 'come', 'goto', 'teleport', 'recover', 'collect', 'give', 'make', 'attack', 'guard',
         'hunt', 'harvest', 'plant', 'breed', 'fish', 'shear',
+        'build', 'light', 'place', 'pillar', 'bridge',
     ]
     username: str | None = None
     x: int | None = None

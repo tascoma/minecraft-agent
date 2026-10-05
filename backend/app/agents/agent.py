@@ -146,6 +146,17 @@ def attack(ctx: RunContext[ChatDeps], target: str | None = None) -> str:
     return f'Going after {what}. The bot will say in chat how it went, so do not claim it is dead.'
 
 
+def _saved_spot(ctx: RunContext[ChatDeps], place: str) -> Place | str:
+    """A saved place in this dimension, or a message saying why not."""
+    saved = ctx.deps.places.get(place)
+    if not saved:
+        known = ', '.join(p.name for p in ctx.deps.places.all()) or 'none yet'
+        return f'No saved place called "{place}". Saved places: {known}.'
+    if ctx.deps.state and saved.dimension != ctx.deps.state.dimension:
+        return f'{saved.name} is in {world.describe_dimension(saved.dimension)}, not here.'
+    return saved
+
+
 @agent.tool
 def guard_area(ctx: RunContext[ChatDeps], place: str | None = None) -> str:
     """Stand guard at a saved place (e.g. "home", "base") or, with no place, where the player is standing.
@@ -154,12 +165,9 @@ def guard_area(ctx: RunContext[ChatDeps], place: str | None = None) -> str:
     until the player tells you to do something else.
     """
     if place:
-        saved = ctx.deps.places.get(place)
-        if not saved:
-            known = ', '.join(p.name for p in ctx.deps.places.all()) or 'none yet'
-            return f'No saved place called "{place}". Saved places: {known}.'
-        if ctx.deps.state and saved.dimension != ctx.deps.state.dimension:
-            return f'{saved.name} is in {world.describe_dimension(saved.dimension)}, not here.'
+        saved = _saved_spot(ctx, place)
+        if isinstance(saved, str):
+            return saved
         ctx.deps.actions.append(BotAction(type='guard', x=saved.x, y=saved.y, z=saved.z, label=saved.name))
         return f'Heading to guard {saved.name}. The bot will say in chat when it is on guard.'
     state = ctx.deps.state
@@ -221,6 +229,72 @@ def shear_sheep(ctx: RunContext[ChatDeps], count: int = 64) -> str:
     """Shear the woolly sheep nearby for wool (up to `count`). You make shears from iron if you need them."""
     ctx.deps.actions.append(BotAction(type='shear', count=count))
     return 'Started shearing. The bot will report how many, so do not claim it is done.'
+
+
+@agent.tool
+def build_shelter(ctx: RunContext[ChatDeps], kind: str = 'shelter', material: str | None = None, place: str | None = None) -> str:
+    """Build a small building with walls, a roof and a door facing the player.
+
+    kind "shelter" is a quick 3x3 room with 2-high walls (about 34 blocks), good for getting through a
+    night; "hut" is a 5x5 room with 3-high walls (about 75 blocks). Built where the player is standing,
+    or at a saved place. Material is what you have most of unless the player names one ("wood", "cobblestone",
+    "dirt"); you gather or craft more if short.
+    """
+    action = BotAction(type='build', target='hut' if 'hut' in kind or 'house' in kind else 'shelter', item=material,
+                       username=ctx.deps.username)
+    if place:
+        saved = _saved_spot(ctx, place)
+        if isinstance(saved, str):
+            return saved
+        action = action.model_copy(update={'x': saved.x, 'y': saved.y, 'z': saved.z, 'label': saved.name})
+    elif state := ctx.deps.state:
+        # "Here" is where the player is; the bot's own spot if it can't see them.
+        pos = state.player_position or state.position
+        action = action.model_copy(update={'x': pos.x, 'y': pos.y, 'z': pos.z})
+    ctx.deps.actions.append(action)
+    return f'Started building a {action.target}. The bot will report how it goes, so do not claim it is built.'
+
+
+@agent.tool
+def place_block(ctx: RunContext[ChatDeps], item: str, place: str | None = None,
+                x: int | None = None, y: int | None = None, z: int | None = None) -> str:
+    """Put one block down: a chest, crafting table, furnace, bed, torch or any block. Next to the player
+    unless they give coordinates or a saved place ("put a chest at home"). You make it if you can.
+    """
+    action = BotAction(type='place', item=item, x=x, y=y, z=z, username=ctx.deps.username)
+    if place:
+        saved = _saved_spot(ctx, place)
+        if isinstance(saved, str):
+            return saved
+        action = action.model_copy(update={'x': saved.x, 'y': saved.y, 'z': saved.z, 'label': saved.name})
+    ctx.deps.actions.append(action)
+    return f'Going to place the {item}. The bot will say where it went.'
+
+
+@agent.tool
+def light_up_area(ctx: RunContext[ChatDeps], radius: int = 16) -> str:
+    """Place torches on dark ground around you (radius 4 to 32 blocks), about 7 apart, so mobs don't
+    spawn. You make torches if you have coal and sticks or wood.
+    """
+    ctx.deps.actions.append(BotAction(type='light', count=radius))
+    return 'Started placing torches. The bot will say how many, so do not claim it is done.'
+
+
+@agent.tool
+def pillar_up(ctx: RunContext[ChatDeps], height: int = 5) -> str:
+    """Jump and place blocks underneath to climb straight up (1 to 32 blocks)."""
+    ctx.deps.actions.append(BotAction(type='pillar', count=height))
+    return f'Pillaring up {height}. The bot will say how far it got.'
+
+
+@agent.tool
+def bridge(ctx: RunContext[ChatDeps], length: int = 10, direction: str | None = None) -> str:
+    """Build a 1-wide bridge across a gap or water, walking out on it as it goes (1 to 32 blocks).
+
+    direction is north, south, east or west; leave it out to go the way the player is facing.
+    """
+    ctx.deps.actions.append(BotAction(type='bridge', target=direction, count=length, username=ctx.deps.username))
+    return f'Started bridging {length} blocks. The bot will say how far it got.'
 
 
 @agent.tool

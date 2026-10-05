@@ -410,20 +410,25 @@ export function installCrafting(bot, { say, log, gathering, resume }) {
     })
   }
 
-  // For other jobs (farming): make sure the bot has one `item`, making it if it can. Throws with a
-  // reason the player can read if it can't.
-  async function obtainItem(task, item) {
-    if (count(item) >= 1) return
+  // For other jobs (farming, building): make sure the bot has `n` of `item` (an item name, or a family
+  // like "family:planks"), making or gathering what's missing. Throws with a reason the player can
+  // read if it can't.
+  async function obtainItem(task, item, n = 1) {
+    if (count(item) >= n) return
     const m = task.maker ?? maker(task)
-    // "shears" is already plural: "I need shears", not "a shears".
-    const plural = item.endsWith('s')
-    m.announce(`I need ${plural ? '' : 'a '}${pretty(item)} for this, making ${plural ? 'them' : 'one'}.`)
+    if (n === 1) {
+      // "shears" is already plural: "I need shears", not "a shears".
+      const plural = item.endsWith('s')
+      m.announce(`I need ${plural ? '' : 'a '}${pretty(item)} for this, making ${plural ? 'them' : 'one'}.`)
+    } else {
+      m.announce(`I need ${n - count(item)} more ${pretty(item)}, getting them.`)
+    }
     try {
-      await m.obtain(item, 1)
+      await m.obtain(item, n)
     } finally {
       if (!task.maker) await m.cleanUp()
     }
   }
 
-  return { make, obtainItem, setHunter: (h) => { hunter = h } }
+  return { make, obtainItem, count, setHunter: (h) => { hunter = h } }
 }

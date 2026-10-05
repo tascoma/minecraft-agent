@@ -138,12 +138,12 @@ Tested in game (`npm run check:crafting`): a stone pickaxe from an empty invento
 
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
-| Place a block where asked | Tool | `bot.placeBlock` | 🔲 |
-| Light up an area with torches | Tool | light-level scan + `placeBlock` | 🔲 |
-| Build a simple emergency shelter before night | Tool + skill | small fixed blueprint | 🔲 |
-| Build from a small blueprint (walls, floor, roof, door) | Tool + skill | blueprint → block list | 🔲 |
-| Bridge across a gap or pillar up | Tool | `placeBlock` under/ahead | 🔲 |
-| Place and fill a bed, chest, crafting table or furnace at the base | Tool | `placeBlock` | 🔲 |
+| Place a block where asked | Tool | `place_block` (at coordinates, a saved place or next to the player) | ✅ |
+| Light up an area with torches | Tool | `light_up_area`: block-light scan, torches 7 apart | ✅ |
+| Build a simple emergency shelter before night | Tool | `build_shelter` kind "shelter" (3x3 inside, door) | ✅ |
+| Build from a small blueprint (walls, floor, roof, door) | Tool | `build_shelter` kind "hut" (5x5 inside); `bot/building.js` blueprints | ✅ *Hut not tested in-game yet* |
+| Bridge across a gap or pillar up | Tool | `bridge`, `pillar_up` | ✅ |
+| Place and fill a bed, chest, crafting table or furnace at the base | Tool | `place_block` with a saved place ("put a chest at home") | ✅ *Placing only; filling chests is Phase 9* |
 
 ## Phase 9: Base and storage
 
@@ -198,5 +198,5 @@ Phases 4 onward need these before they work well:
 1. ~~Phase 1 (world awareness) and the task system.~~ Done; the task system runs one job at a time.
 2. ~~Phase 3 (staying alive)~~ done. ~~Phase 6 reflexes (fighting back)~~ done, using a small attack loop instead of `mineflayer-pvp` (unmaintained since 2021). Guarding, the bow and the shield are done too, so Phase 6 is complete.
 3. ~~Phases 4 and 5 (gathering, crafting)~~ done. The bot can now go from nothing to stone tools, torches and iron ingots by itself.
-4. ~~Phase 7 (food and farming)~~ done. Phases 8–9 (building, base) are next.
+4. ~~Phases 7–8 (food and farming, building)~~ done. Phase 9 (base and storage) is next.
 5. Phases 10–11 (long-term goals and companionship).
