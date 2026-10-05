@@ -5,7 +5,7 @@ import { joinTester, sleep } from './tester.js'
 
 const result = /^Got \d+|only got|couldn't get|don't know how/
 
-joinTester(async ({ companion: bot, say, command, waitFor, check }) => {
+joinTester(async ({ give, companion: bot, say, command, waitFor, check }) => {
   command(`/clear ${bot} stone_pickaxe`)
   command(`/clear ${bot} wooden_pickaxe`)
   await sleep(1000)
@@ -19,7 +19,7 @@ joinTester(async ({ companion: bot, say, command, waitFor, check }) => {
   const noPick = await waitFor(result, 240000)
   check('makes its own pickaxe for cobblestone', /^Got 4 cobblestone/.test(noPick ?? ''), noPick)
 
-  command(`/give ${bot} stone_pickaxe`)
+  give('stone_pickaxe')
   await sleep(1000)
   say('get 20 cobblestone')
   const progress = await waitFor(/so far|^Got|only got|couldn't/, 150000)

@@ -3,13 +3,13 @@
 // Run: npm run check:survival (with the backend and bot running)
 import { joinTester, sleep } from './tester.js'
 
-joinTester(async ({ companion: bot, say, command, waitFor, check, armor }) => {
+joinTester(async ({ give, companion: bot, say, command, waitFor, check, armor }) => {
   // Commands make the server print "[ClaudeTester: ...]" to operators; the bot must not answer those.
-  command(`/give ${bot} bread 4`)
+  give('bread', 4)
   check('commands get no reply', (await waitFor(/./, 4000)) === null)
 
-  command(`/give ${bot} iron_chestplate`)
-  command(`/give ${bot} iron_helmet`)
+  give('iron_chestplate')
+  give('iron_helmet')
   await sleep(3000)
   check('puts on armor that lands in its inventory', armor().includes('iron_chestplate'), JSON.stringify(armor()))
 
@@ -23,7 +23,7 @@ joinTester(async ({ companion: bot, say, command, waitFor, check, armor }) => {
   command('/kill @e[tag=survival_check]')
   await sleep(2000)
 
-  command(`/give ${bot} cobblestone 16`)
+  give('cobblestone', 16)
   await sleep(1000)
   command(`/kill ${bot}`)
   const death = await waitFor(/I died at/, 15000)

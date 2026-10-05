@@ -17,6 +17,8 @@ export function joinTester(run) {
   let failures = 0
   // Names of entities that appeared since the last clearSeen(), e.g. 'arrow'.
   const seen = new Set()
+  // Items given to the companion, taken back when the check ends so repeated runs don't fill its inventory.
+  const given = []
   t.on('entitySpawn', (e) => seen.add(e.name))
 
   t.on('chat', (sender, message) => { if (sender === companion) console.log(`${stamp()} <${companion}> ${message}`) })
@@ -24,8 +26,15 @@ export function joinTester(run) {
 
   const helpers = {
     companion,
+    // The tester's own Mineflayer bot, for checks that need to read the world directly.
+    client: t,
     // Chat as ClaudeTester; the companion treats it like any player's message.
     say(message) { console.log(`${stamp()} <ClaudeTester> ${message}`); t.chat(message) },
+    // Give the companion an item for this check; whatever is left of it is cleared at the end.
+    give(item, count = 1) {
+      given.push([item, count])
+      helpers.command(`/give ${companion} ${item} ${count}`)
+    },
     command(command) { console.log(`${stamp()} > ${command}`); t.chat(command) },
     // Resolve with the companion's next chat message matching `pattern`, or null after `ms`.
     waitFor(pattern, ms) {
@@ -101,6 +110,9 @@ export function joinTester(run) {
     try {
       await run(helpers)
     } finally {
+      // Take back what the check gave (up to the amount given; anything used up is already gone).
+      for (const [item, count] of given) helpers.command(`/clear ${companion} ${item} ${count}`)
+      if (given.length) await sleep(1000)
       console.log(failures ? `${failures} check(s) failed` : 'all checks passed')
       t.quit()
       process.exitCode = failures ? 1 : 0

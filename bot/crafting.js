@@ -143,6 +143,7 @@ export function installCrafting(bot, { say, log, gathering, resume }) {
       step(pretty(key))
       if (key.startsWith('family:')) return obtainFamily(key.slice(7), n)
       if (smelting[key]) return smelt(key, n)
+      if (hunter?.drops(key)) return hunter.hunt(task, key, n - count(key))
       if (resolveTarget(registry, key)) return gather(key, n)
       if (registry.itemsByName[key] && Recipe.find(registry.itemsByName[key].id, null).length) return craft(key, n)
       throw new Missing(`I don't know how to get ${pretty(key)}`)
@@ -362,6 +363,10 @@ export function installCrafting(bot, { say, log, gathering, resume }) {
     return { obtain, cleanUp, announce }
   }
 
+  // Set by farming.js: hunts animals for items like beef or leather, so "make cooked beef" works
+  // from nothing.
+  let hunter = null
+
   // Gathering asks for this when it needs a tool, e.g. a wooden pickaxe to mine stone. Inside a make
   // job it reuses that job's workstations; on its own (a collect job) it cleans up after itself.
   gathering.setToolMaker(async (task, tool) => {
@@ -405,5 +410,20 @@ export function installCrafting(bot, { say, log, gathering, resume }) {
     })
   }
 
-  return { make }
+  // For other jobs (farming): make sure the bot has one `item`, making it if it can. Throws with a
+  // reason the player can read if it can't.
+  async function obtainItem(task, item) {
+    if (count(item) >= 1) return
+    const m = task.maker ?? maker(task)
+    // "shears" is already plural: "I need shears", not "a shears".
+    const plural = item.endsWith('s')
+    m.announce(`I need ${plural ? '' : 'a '}${pretty(item)} for this, making ${plural ? 'them' : 'one'}.`)
+    try {
+      await m.obtain(item, 1)
+    } finally {
+      if (!task.maker) await m.cleanUp()
+    }
+  }
+
+  return { make, obtainItem, setHunter: (h) => { hunter = h } }
 }

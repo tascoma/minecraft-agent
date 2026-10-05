@@ -51,7 +51,7 @@ The bot does one thing at a time: follow, stand still, or walk somewhere. When i
 | Remember named places ("this is home", "the mine") and go back to them | Tool + memory | `save_place`, `go_to_place`, `forget_place`; `backend/data/worlds/<world id>/places.json` | ✅ |
 | Say when it arrives or can't find a way | Bot | `pathfinder.goto` promise | ✅ |
 | Explore in a direction and report what it finds | Tool | `GoalXZ` + Phase 1 scans; needs bot → backend events | 🔲 |
-| Swim, climb ladders, open doors and gates | Reflex | `bot/movements.js` (wooden doors and gates; iron ones need redstone) | ✅ |
+| Swim, climb ladders, open doors and gates | Reflex | `bot/movements.js` (wooden doors and gates; iron ones need redstone) | ✅ *Known bug: can stall stepping from a dirt path into a doorway (seen at a village house)* |
 | Avoid lava, cliffs and deep water | Reflex | `bot/movements.js`: lava avoided, `maxDropDown` 3, `liquidCost` 5 | ✅ |
 | Teleport to the player ("tp to me") | Tool | `teleport_to_player`, `/tp`; needs Allow Cheats on | ✅ |
 | Build up or bridge across gaps when stuck | Reflex | `Movements.scafoldingBlocks` with dirt or cobblestone; during gathering jobs only, never while following and never in protected areas | ✅ |
@@ -126,13 +126,13 @@ Tested in game (`npm run check:crafting`): a stone pickaxe from an empty invento
 
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
-| Hunt animals for food (cows, pigs, chickens, sheep) | Tool | `attack` (Phase 6) + collect drops | 🔲 *Kills on request; doesn't pick up the drops yet* |
-| Cook raw meat | Tool | furnace (Phase 5) | 🔲 |
-| Harvest and replant crops (wheat, carrots, potatoes) | Tool | `bot.dig` + `bot.placeBlock` seeds | 🔲 |
-| Start a farm: till soil near water and plant | Tool + skill | hoe + `bot.activateBlock` | 🔲 |
-| Breed animals | Tool | `bot.activateEntity` with food | 🔲 |
-| Fish | Tool | `bot.fish` | 🔲 |
-| Shear sheep for wool | Tool | `bot.activateEntity` with shears | 🔲 |
+| Hunt animals for food (cows, pigs, chickens, sheep) | Tool | `hunt`, `bot/farming.js` (skips babies, leaves the last two) | ✅ |
+| Cook raw meat | Tool | `make_item` (Phase 5); hunts the animal if there's no raw meat | ✅ |
+| Harvest and replant crops (wheat, carrots, potatoes) | Tool | `harvest_crops` | ✅ |
+| Start a farm: till soil near water and plant | Tool | `plant_crops` (makes a hoe; breaks grass for seeds) | ✅ |
+| Breed animals | Tool | `breed_animals` | ✅ |
+| Fish | Tool | `go_fishing` (needs a rod or string) | ✅ |
+| Shear sheep for wool | Tool | `shear_sheep` (makes shears from iron) | ✅ |
 
 ## Phase 8: Building
 
@@ -198,5 +198,5 @@ Phases 4 onward need these before they work well:
 1. ~~Phase 1 (world awareness) and the task system.~~ Done; the task system runs one job at a time.
 2. ~~Phase 3 (staying alive)~~ done. ~~Phase 6 reflexes (fighting back)~~ done, using a small attack loop instead of `mineflayer-pvp` (unmaintained since 2021). Guarding, the bow and the shield are done too, so Phase 6 is complete.
 3. ~~Phases 4 and 5 (gathering, crafting)~~ done. The bot can now go from nothing to stone tools, torches and iron ingots by itself.
-4. Phases 7–9 (farming, building, base).
+4. ~~Phase 7 (food and farming)~~ done. Phases 8–9 (building, base) are next.
 5. Phases 10–11 (long-term goals and companionship).

@@ -162,3 +162,23 @@ def test_guard_a_saved_place_or_where_the_player_is(store):
         BotAction(type='guard', x=1, y=64, z=2, label='home'),
         BotAction(type='guard', x=5, y=70, z=6),
     ]
+
+
+def test_farming_tools_queue_actions(store):
+    from app.agents.agent import breed_animals, go_fishing, harvest_crops, hunt, plant_crops, shear_sheep
+
+    c = ctx(store)
+    hunt(c, animal='cow', count=3)
+    harvest_crops(c)
+    plant_crops(c, crop='carrots', count=8)
+    breed_animals(c, animal='sheep')
+    go_fishing(c, count=2)
+    shear_sheep(c)
+    assert c.deps.actions == [
+        BotAction(type='hunt', target='cow', count=3),
+        BotAction(type='harvest'),
+        BotAction(type='plant', target='carrots', count=8),
+        BotAction(type='breed', target='sheep'),
+        BotAction(type='fish', count=2),
+        BotAction(type='shear', count=64),
+    ]

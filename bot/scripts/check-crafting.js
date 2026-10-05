@@ -6,7 +6,7 @@ import { joinTester, sleep } from './tester.js'
 
 const result = /^Made \d+|couldn't make|don't know what/
 
-joinTester(async ({ companion: bot, say, command, waitFor, check }) => {
+joinTester(async ({ give, companion: bot, say, command, waitFor, check }) => {
   // Start from nothing useful, so the bot has to work out the whole chain.
   for (const what of ['#minecraft:logs', '#minecraft:planks', 'stick', 'cobblestone', 'crafting_table', 'furnace',
     'wooden_pickaxe', 'stone_pickaxe', 'coal', 'charcoal', 'torch']) {
@@ -27,7 +27,7 @@ joinTester(async ({ companion: bot, say, command, waitFor, check }) => {
 
   // Smelting: hand it raw iron, so the furnace and smelting are tested without needing iron ore nearby.
   command(`/clear ${bot} furnace`)
-  command(`/give ${bot} raw_iron 2`)
+  give('raw_iron', 2)
   await sleep(1000)
   say('make 2 iron ingots')
   const ingots = await waitFor(result, 420000)

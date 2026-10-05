@@ -292,6 +292,7 @@ export function installGathering(bot, { say, log, survival, resume }) {
     collect,
     give,
     gather,
+    pickUpDrops,
     stop,
     setToolMaker: (fn) => { makeTool = fn },
   }

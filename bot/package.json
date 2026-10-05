@@ -10,7 +10,8 @@
     "check:survival": "node --env-file-if-exists=../.env scripts/check-survival.js",
     "check:gathering": "node --env-file-if-exists=../.env scripts/check-gathering.js",
     "check:crafting": "node --env-file-if-exists=../.env scripts/check-crafting.js",
-    "check:combat": "node --env-file-if-exists=../.env scripts/check-combat.js"
+    "check:combat": "node --env-file-if-exists=../.env scripts/check-combat.js",
+    "check:farming": "node --env-file-if-exists=../.env scripts/check-farming.js"
   },
   "dependencies": {
     "mineflayer": "^4.39.0",

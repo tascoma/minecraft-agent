@@ -235,11 +235,19 @@ export function installCombat(bot, { say, log, survival, companion }) {
     setTimeout(() => { bot.deactivateItem(); blocking = false }, blockMs)
   }
 
-  function startFight(target, { ordered = false, why }) {
+  // Forget the current fight, telling a job waiting on it (kill) whether the target died.
+  function dropFight(killed) {
+    fight?.resolve?.(killed)
+    fight = null
+    fightingNow = null
+  }
+
+  function startFight(target, { ordered = false, quiet = false, resolve = null, why }) {
     if (fight?.target === target) return
     if (!ordered && !canFight() && survival.current() !== 'fight') return
     if (survival.current() !== 'fight') survival.start('fight')
-    fight = { target, since: Date.now(), lastHit: 0, ordered }
+    dropFight(false)
+    fight = { target, since: Date.now(), lastHit: 0, ordered, quiet, resolve }
     fightingNow = target.name
     log('INFO', `fighting ${target.name} (${why})`)
     if (!ordered) announce('fight', `Fighting the ${pretty(target.name)}!`)
@@ -247,10 +255,11 @@ export function installCombat(bot, { say, log, survival, companion }) {
     bot.pathfinder.setGoal(new goals.GoalFollow(target, 2), true)
   }
 
-  function endFight(message) {
-    const { target, ordered } = fight
-    fight = null
-    fightingNow = null
+  function endFight(message, killed = false) {
+    const { target, ordered, quiet } = fight
+    dropFight(killed)
+    // A quiet fight belongs to a job, which reports how it went itself.
+    if (quiet) { survival.finish('fight'); return }
     if (message) say(message)
     else if (ordered) say(`I lost track of the ${pretty(target.name)}.`)
     survival.finish('fight')
@@ -258,22 +267,23 @@ export function installCombat(bot, { say, log, survival, companion }) {
 
   // One step of the fight, run every 100 ms.
   function fightStep() {
-    if (survival.current() !== 'fight') { fight = null; fightingNow = null; return } // something else took over
+    if (survival.current() !== 'fight') { dropFight(false); return } // something else took over
     const { target } = fight
     const me = bot.entity.position
     if (!target.isValid || !bot.entities[target.id]) {
       // Dead or despawned. Carry on with the next attacker, if any.
       const next = nextThreat()
-      const done = fight.ordered ? `Got the ${pretty(target.name)}.` : null
+      const done = fight.ordered && !fight.quiet ? `Got the ${pretty(target.name)}.` : null
       if (next && bot.health > lowHealth) {
         if (done) say(done)
+        dropFight(true)
         fight = { target: next, since: Date.now(), lastHit: 0, ordered: false }
         fightingNow = next.name
         log('INFO', `fighting ${next.name} (next attacker)`)
         bot.pathfinder.setGoal(new goals.GoalFollow(next, 2), true)
         return
       }
-      endFight(done)
+      endFight(done, true)
       return
     }
     // A guard keeps after anything near its post, however far that is from the bot.
@@ -318,7 +328,7 @@ export function installCombat(bot, { say, log, survival, companion }) {
     if (!creeper) return
     const current = survival.current()
     if (current && current !== 'fight') return
-    if (current === 'fight') { fight = null; fightingNow = null }
+    if (current === 'fight') dropFight(false)
     survival.start('creeper')
     bot.pathfinder.setGoal(new goals.GoalInvert(new goals.GoalFollow(creeper, creeperSafe)), true)
     announce('creeper', 'Creeper! Backing away.')
@@ -348,7 +358,7 @@ export function installCombat(bot, { say, log, survival, companion }) {
     }
   }, 100)
   bot.once('end', () => clearInterval(timer))
-  bot.on('death', () => { fight = null; fightingNow = null })
+  bot.on('death', () => dropFight(false))
 
   // The guard job: stand at a spot and fight hostile mobs that come near it, going back to the
   // spot after each fight. Runs until the player gives another command.
@@ -379,6 +389,14 @@ export function installCombat(bot, { say, log, survival, companion }) {
 
   return {
     guard,
+    // For jobs like hunting: fight `target` without any chat. Resolves true when it dies, false
+    // when the fight ends otherwise (lost track of it, interrupted, or the bot died).
+    kill(target) {
+      return new Promise((resolve) => {
+        if (!canAttack(target)) { resolve(false); return }
+        startFight(target, { ordered: true, quiet: true, resolve, why: 'hunting' })
+      })
+    },
     // The "attack" command. Players are never hit, and nor are villagers or pets.
     attack({ target: name }) {
       const target = findTarget(Object.values(bot.entities), bot.entity.position, name)

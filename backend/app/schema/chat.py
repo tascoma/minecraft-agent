@@ -98,10 +98,13 @@ class BotAction(BaseModel):
     follow/come/teleport: `username` is the player. goto: `x`, `z`, optional `y`, and an optional `label` the bot
     uses when it reports arriving ("Made it to home."). collect and make: `item` and `count`. give: `username`,
     `item`, and `count` (None for all of it). attack: `target`, a mob name like 'zombie' (None for the nearest hostile). guard: `x`, `y`, `z`
-    and an optional `label`.
+    and an optional `label`. hunt, plant: `target` (an animal or crop) and `count`. harvest, breed: `target`.
+    fish, shear: `count`.
     """
 
-    type: Literal['follow', 'stay', 'come', 'goto', 'teleport', 'recover', 'collect', 'give', 'make', 'attack', 'guard']
+    type: Literal['follow', 'stay', 'come', 'goto', 'teleport', 'recover', 'collect', 'give', 'make', 'attack', 'guard',
+        'hunt', 'harvest', 'plant', 'breed', 'fish', 'shear',
+    ]
     username: str | None = None
     x: int | None = None
     y: int | None = None

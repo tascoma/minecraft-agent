@@ -16,7 +16,7 @@ async function within(ms, test) {
 
 const tag = 'combat_check'
 
-joinTester(async ({ companion: bot, say, command, waitFor, check, count, distanceTo, openSpot, playersNear, seen, clearSeen, position, usingItem, offHand }) => {
+joinTester(async ({ give, companion: bot, say, command, waitFor, check, count, distanceTo, openSpot, playersNear, seen, clearSeen, position, usingItem, offHand }) => {
   // Backing away from the creeper can land the bot somewhere awkward; later checks start from here.
   const backToStart = () => start && command(`/tp ${bot} ${start.x} ${start.y} ${start.z}`)
   // Summon a tagged mob next to the bot and wait until the tester can see it.
@@ -37,7 +37,7 @@ joinTester(async ({ companion: bot, say, command, waitFor, check, count, distanc
   const near = (mob) => count(mob, 10)
   const start = position()?.floored()
   const heal = () => command(`/effect give ${bot} instant_health 1 5`)
-  command(`/give ${bot} iron_sword`)
+  give('iron_sword')
   heal()
   await sleep(2000)
 
@@ -101,8 +101,8 @@ joinTester(async ({ companion: bot, say, command, waitFor, check, count, distanc
   }
 
   // Bow: a still husk out of reach hits the bot, which shoots it instead of walking over.
-  command(`/give ${bot} bow`)
-  command(`/give ${bot} arrow 32`)
+  give('bow')
+  give('arrow', 32)
   await sleep(1500)
   clearSeen()
   if (await summon('husk', 12, 'NoAI:1b')) {
@@ -115,7 +115,7 @@ joinTester(async ({ companion: bot, say, command, waitFor, check, count, distanc
   }
 
   // Shield: kept in the off-hand, and raised when an arrow flies at the bot.
-  command(`/give ${bot} shield`)
+  give('shield')
   check('holds a shield in its off-hand', await within(5000, () => offHand() === 'shield'), offHand())
   const from = openSpot(6)
   if (!from) console.log('SKIP raises its shield at an incoming arrow: no open ground to shoot from')
