@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { describe, it } from 'node:test'
-import { animalName, animalsFor, cropName, isBaby, isRipe, isSheared } from '../farming.js'
+import { animalName, animalsFor, cropName, isBaby, isRipe, isSheared } from '../jobs/farming.js'
 import { registry } from './helpers.js'
 
 const Block = createRequire(import.meta.url)('prismarine-block')(registry)

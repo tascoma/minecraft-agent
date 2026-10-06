@@ -114,7 +114,7 @@ A **reflex** is behavior that runs in the bot on its own: no backend call, no Cl
 
 Following the player is a reflex: `mineflayer-pathfinder` keeps the bot within 3 blocks of you every tick. The agent only switches it on or off.
 
-The survival reflexes in `bot/survival.js` are the same kind of thing: eating, putting on armor, backing off from mobs when hurt, getting out of lava, fire and deep water, and sleeping when you sleep. So are the combat reflexes in `bot/combat.js` (fighting whatever hits the bot or you, attacking mobs that come close, backing away from creepers, raising a shield at arrows) and the automatic drop-off of a full inventory in `bot/storage.js`. Combat uses the same reflex slot as survival, so backing off when badly hurt wins over a fight. Two rules keep reflexes from fighting with what you asked for:
+The survival reflexes in `bot/reflexes/survival.js` are the same kind of thing: eating, putting on armor, backing off from mobs when hurt, getting out of lava, fire and deep water, and sleeping when you sleep. So are the combat reflexes in `bot/reflexes/combat.js` (fighting whatever hits the bot or you, attacking mobs that come close, backing away from creepers, raising a shield at arrows) and the automatic drop-off of a full inventory in `bot/jobs/storage.js`. Combat uses the same reflex slot as survival, so backing off when badly hurt wins over a fight. Two rules keep reflexes from fighting with what you asked for:
 
 - **Your command wins.** Any action from the agent cancels a running reflex (`survival.cancel()`) and the current job (`cancelTask()`).
 - **A reflex finishes, then hands back.** While one is driving, the follow logic stays out of the way (`survival.busy()`); when it's done, the bot goes back to following or standing still (`resume()`). If a reflex interrupts a job (say, a fight in the middle of fishing), the job waits, retries the walk that was cut short, and carries on.
@@ -205,23 +205,28 @@ The bot only reacts to **real player chat** (the `playerChat` packet, with the s
 
 ```
 bot/
-  index.js                   connection, reconnect, logging, follow reflex, action executor, backend calls
-  world.js                   which world this is (seed hash, MC_WORLD, or the server address)
-  state.js                   state snapshot sent with each chat
-  alerts.js                  chat warnings: low health, nightfall
-  movements.js               pathfinder rules: no digging, safe drops, doors and gates, protected areas
-  survival.js                reflexes: eat, armor, back off when hurt, escape lava/fire/water, sleep, item recovery
-  combat.js                  reflexes: fight back, defend, creepers, shield; attack and guard jobs; who may be hit
-  archery.js                 bow maths: aim for arrow drop and moving targets, line of fire
-  tasks.js                   the current job (one at a time, cancellable, with progress) and the queue behind it
-  gathering.js               collect and give jobs: what to break for an item, protected areas
-  crafting.js                make jobs: recipe chains, smelting, placing and picking up workstations
-  farming.js                 hunt, harvest, plant, breed, fish and shear jobs
-  building.js                place, light, shelter/hut, bridge and pillar jobs; blueprints
-  storage.js                 store, take, inspect and sort jobs; chest memory; drop-off reflex
-  travel.js                  through portals (and after the player), eye of ender
-  trading.js                 villager trades: list and buy
-  walk.js                    walking with a time limit, for every walk inside a job or reflex
+  index.js                   connection, reconnect, follow reflex, movement commands, action executor
+  core/                      shared plumbing
+    backend.js               every HTTP call to the backend (chat, places, chests, events)
+    log.js                   backend/logs/bot.log and the console
+    world.js                 which world this is (seed hash, MC_WORLD, or the server address)
+    state.js                 state snapshot sent with each chat
+    movements.js             pathfinder rules: no digging, safe drops, doors and gates, protected areas
+    tasks.js                 the current job (one at a time, cancellable, with progress) and the queue behind it
+    walk.js                  walking with a time limit, for every walk inside a job or reflex
+  reflexes/                  what the bot does by itself
+    survival.js              eat, armor, back off when hurt, escape lava/fire/water, sleep, item recovery
+    combat.js                fight back, defend, creepers, shield, loot after fights; attack and guard jobs; who may be hit
+    archery.js               bow maths: aim for arrow drop and moving targets, line of fire
+    alerts.js                warnings and tips: low health, nightfall, storms, creepers by the player, ore in view
+  jobs/                      what the player asks for
+    gathering.js             collect, give, pick up, mining trips; what to break for an item, worn tools
+    crafting.js              make jobs: recipe chains, smelting, placing and picking up workstations
+    farming.js               hunt, harvest, plant, breed, fish and shear
+    building.js              place, light, shelter/hut, portal, bridge and pillar; blueprints
+    storage.js               store, take, inspect and sort chests; chest memory; drop-off reflex
+    travel.js                portals (and following the player through), eye of ender, exploring
+    trading.js               villager trades: list and buy
   test/                      unit tests (npm test), no Minecraft needed
   scripts/                   in-game checks with a second player (npm run check:*)
   patches/                   fixes to npm packages, applied by patch-package on npm install
@@ -254,7 +259,7 @@ backend/logs/
 Chat goes through `POST /chat` (below). Besides that, the bot fetches saved places (`GET /places`) and remembered chests (`GET /chests`) when it joins, reports chests as it opens them (`POST /chests`, `DELETE /chests`), and reports what happens (`POST /events`: jobs finished, deaths, trips) for the journal. None of these call Claude.
 
 ```jsonc
-// request (bot → backend); state is built by bot/state.js
+// request (bot → backend); state is built by bot/core/state.js
 { "username": "TScoms23", "message": "stay here",
   "state": { "world_id": "seed-b766a50ffd11a3cb",
              "health": 18, "food": 15, "position": {"x": 0, "y": 64, "z": 0},
@@ -280,7 +285,7 @@ Chat goes through `POST /chat` (below). Besides that, the bot fetches saved plac
 
 When something fails, the backend answers with an error status and `{ "error": "Claude is rate limiting me. Try again in a moment." }`. The message is written for the player (`app/core/errors.py`). The bot says it in chat as `Error: ...` and writes the full details to the logs. The bot reports its own failures the same way: backend unreachable or slow, an action that throws, an unexpected crash. Repeats of the same error are muted for 10 seconds.
 
-When adding an action, change both sides together: add the type to `BotAction` in `schema/chat.py` and handle it in `runAction` in `bot/index.js`. The bot logs a warning for any action type it doesn't know.
+When adding an action, change both sides together: add the type to `BotAction` in `schema/chat.py` and handle it in `dispatch` in `bot/index.js` (usually by calling a job in `bot/jobs/`). The bot logs a warning for any action type it doesn't know.
 
 ---
 
@@ -291,14 +296,14 @@ When adding an action, change both sides together: add the type to `BotAction` i
 | Must it react within a second, or run constantly? | A **reflex** in `bot/` |
 | Does the player ask for it, or does it need judgment? | A **tool** in the backend, plus an action handler in the bot |
 | Is it a multi-step plan or game knowledge? | A **skill** in `skills/` |
-| Does it need to know the world state? | Add it to the snapshot in `bot/state.js` and `BotState` in `schema/chat.py` |
+| Does it need to know the world state? | Add it to the snapshot in `bot/core/state.js` and `BotState` in `schema/chat.py` |
 
 Most functionalities need two or three of these. A typical new action:
 
-1. Bot: implement it with Mineflayer (e.g. `gathering.collect({ item, count })`).
+1. Bot: implement it with Mineflayer, usually as a job in `bot/jobs/` (e.g. `gathering.collect({ item, count })`).
 2. Schema: add the action type to `BotAction`.
 3. Backend: add a tool that appends the action, with a clear docstring.
-4. Bot: handle the new type in `runAction`.
+4. Bot: handle the new type in `dispatch` in `bot/index.js`.
 5. Optionally, add or update a skill that uses the tool in a larger plan.
 
 ---
@@ -327,7 +332,7 @@ flowchart LR
     EVR <--> MEM
 ```
 
-1. **Task queue in the bot.** *Done:* one job at a time with progress, cancel and a result in chat, and jobs from the same reply queue behind it (`bot/tasks.js`). The first action of a reply replaces what's running; the rest wait their turn. Every job waits out reflexes and carries on.
+1. **Task queue in the bot.** *Done:* one job at a time with progress, cancel and a result in chat, and jobs from the same reply queue behind it (`bot/core/tasks.js`). The first action of a reply replaces what's running; the rest wait their turn. Every job waits out reflexes and carries on.
 2. **State snapshot** ✅. Each request includes health, hunger, position, time, inventory and nearby points of interest, so the agent decides with real information instead of guessing.
 3. **Events endpoint.** *Done.* `POST /events` records jobs finished, deaths and trips in the journal, which the agent reads on its next message. The bot marks failed jobs and deaths as worth a reaction; with `REACT_TO_EVENTS=true` the backend then runs the agent on an `[Event]` message (it may reply SKIP), at most every 2 minutes and within the budget, and the reply and actions go back to the bot like a chat reply.
 4. **Memory.** Named places and chest contents are done (`services/places.py`, `services/chests.py`); the bot reports a chest each time it opens one (`POST /chests`), loads them on join (`GET /chests`) and reports chests it finds gone (`DELETE /chests`). It also remembers where it last died, in memory only. Notes the player asks it to keep, and a journal of what happened, are in `services/journal.py`; the agent sees the notes and the last few events on every message, and searches older ones with `recall`.
@@ -341,7 +346,7 @@ Both patches live in `bot/patches/` and are reapplied by `patch-package` on ever
 
 `mineflayer-pathfinder` 2.4.5 has door support, but it's off by default and doesn't work properly:
 
-- It only opens fence gates, and treats every door, open or closed, as a wall. `bot/movements.js` fixes this by checking each door's and gate's actual state.
+- It only opens fence gates, and treats every door, open or closed, as a wall. `bot/core/movements.js` fixes this by checking each door's and gate's actual state.
 - After opening a gate or door, it stays in "placing a block" mode. If the bot carries dirt or cobblestone, it then throws on every tick.
 - When it smooths a finished route, it puts any step that passes through a door or gate on top of the door's thin panel, a jump the bot can't make. The bot then stands still in front of an open door forever.
 
@@ -356,7 +361,7 @@ If you upgrade `mineflayer-pathfinder` or `prismarine-physics`, check whether it
 ## 8. Limits that keep the bot stable
 
 - **One block at a time, 45 seconds each.** A gathering job gives up on a block it can't reach in 45 seconds and tries another, so the pathfinder can't stall a job by re-planning forever.
-- **Every walk inside a job or reflex has a time limit** (`bot/walk.js`): the pathfinder never gives up on its own. Going back for items after dying gets 90 seconds, each dropped item 10, a workstation 60. Trips the player asks for ("go to …") have no limit; "stop" ends them.
+- **Every walk inside a job or reflex has a time limit** (`bot/core/walk.js`): the pathfinder never gives up on its own. Going back for items after dying gets 90 seconds, each dropped item 10, a workstation 60. Trips the player asks for ("go to …") have no limit; "stop" ends them.
 - **The bot mines blocks itself** (walk, equip, dig, pick up drops for up to 5 seconds) instead of using `mineflayer-collectblock`, which waited forever for a drop it couldn't reach and froze jobs.
 - **Path search radius during jobs.** With digging allowed, almost every block is a possible route, and an unbounded path search ran the bot out of memory (4 GB) once. During jobs the pathfinder only searches 80 blocks around the bot; targets are never more than 48 away.
 - **Dying cancels the job.** The items are gone and the bot respawns somewhere else.

@@ -1,21 +1,22 @@
 // Joins a Minecraft Java server and relays chat to the backend agent.
-import fs from 'node:fs'
 import mineflayer from 'mineflayer'
 import pathfinderPkg from 'mineflayer-pathfinder'
-import { installAlerts } from './alerts.js'
-import { installBuilding } from './building.js'
-import { installCombat } from './combat.js'
-import { installCrafting } from './crafting.js'
-import { installFarming } from './farming.js'
-import { installGathering } from './gathering.js'
-import { CompanionMovements, setProtectedSpots } from './movements.js'
-import { snapshot } from './state.js'
-import { installStorage, setChestMemory } from './storage.js'
-import { installSurvival } from './survival.js'
-import { installTrading } from './trading.js'
-import { installTravel } from './travel.js'
-import { cancelTask, currentTask, queued, setTaskListener, soundsLikeFailure } from './tasks.js'
-import { currentWorldId, setWorldFromLogin } from './world.js'
+import { backendErrorMessage, describeFetchError, fetchChests, fetchPlaces, forgetChest, postChat, postEvent, reportChest } from './core/backend.js'
+import { log } from './core/log.js'
+import { CompanionMovements, setProtectedSpots } from './core/movements.js'
+import { snapshot } from './core/state.js'
+import { cancelTask, currentTask, queued, setTaskListener, soundsLikeFailure } from './core/tasks.js'
+import { setWorldFromLogin } from './core/world.js'
+import { installAlerts } from './reflexes/alerts.js'
+import { installCombat } from './reflexes/combat.js'
+import { installSurvival } from './reflexes/survival.js'
+import { installBuilding } from './jobs/building.js'
+import { installCrafting } from './jobs/crafting.js'
+import { installFarming } from './jobs/farming.js'
+import { installGathering } from './jobs/gathering.js'
+import { installStorage, setChestMemory } from './jobs/storage.js'
+import { installTrading } from './jobs/trading.js'
+import { installTravel } from './jobs/travel.js'
 
 const { pathfinder, goals } = pathfinderPkg
 
@@ -24,7 +25,6 @@ const port = Number(process.env.MC_PORT ?? 25565)
 const username = process.env.MC_USERNAME ?? 'Claude'
 // Names the world instead of using its seed hash (e.g. when two worlds share a seed).
 const worldOverride = process.env.MC_WORLD
-const backendUrl = process.env.BACKEND_URL ?? 'http://127.0.0.1:8000'
 // How close the bot tries to stay to the player it follows, in blocks.
 const followRange = 3
 // How close the bot gets when called over with "come here", in blocks.
@@ -34,21 +34,8 @@ const teleportTimeoutMs = 3000
 // Wait before reconnecting after a disconnect, doubling up to the max while the world stays closed.
 const reconnectBaseMs = 5_000
 const reconnectMaxMs = 60_000
-// How long to wait for the backend; an agent run with several tool calls can take a while.
-const backendTimeoutMs = 60_000
 // Don't repeat the same error in chat more often than this, so a failure loop can't spam the player.
 const errorRepeatMs = 10_000
-
-// Bot actions go to backend/logs/bot.log, next to the agent's own log.
-const logDir = new URL('../backend/logs/', import.meta.url)
-fs.mkdirSync(logDir, { recursive: true })
-const logFile = fs.createWriteStream(new URL('bot.log', logDir), { flags: 'a' })
-
-function log(level, message) {
-  const line = `${new Date().toISOString()} ${level} bot: ${message}`
-  logFile.write(line + '\n')
-  ;(level === 'ERROR' ? console.error : console.log)(line)
-}
 
 // What the bot said during the current job, so the journal can record how it turned out.
 let saidDuringJob = []
@@ -74,77 +61,21 @@ function reportError(message) {
   if (bot?.entity) say(`Error: ${message}`)
 }
 
-// POST to the backend, retrying once if the connection fails before any response. That happens
-// when a kept-alive connection was closed by the server just as it was reused; the backend never
-// saw the request, so sending it again is safe.
-async function postChat(body) {
-  const request = () =>
-    fetch(`${backendUrl}/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(backendTimeoutMs),
-    })
-  try {
-    return await request()
-  } catch (err) {
-    if (err.name === 'TimeoutError') throw err
-    log('WARN', `backend request failed (${describeFetchError(err)}), retrying once`)
-    return await request()
-  }
-}
-
-// fetch hides the real reason (refused, reset, ...) in err.cause.
-function describeFetchError(err) {
-  const cause = err.cause
-  return cause ? `${err.message}: ${cause.code ?? cause.message}` : err.message
-}
-
-const worldQuery = () => (currentWorldId() ? `?world=${encodeURIComponent(currentWorldId())}` : '')
-
 // Load the saved places so the no-digging zones are right before anyone chats. Chat replies keep
 // them up to date after that.
 async function loadProtectedSpots() {
-  try {
-    const res = await fetch(`${backendUrl}/places${worldQuery()}`, { signal: AbortSignal.timeout(5000) })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const spots = await res.json()
-    setProtectedSpots(spots)
-    log('INFO', `protecting ${spots.length} saved place(s) from digging`)
-  } catch (err) {
-    log('WARN', `couldn't load saved places from the backend (${describeFetchError(err)}); none protected until the next chat`)
-  }
+  const spots = await fetchPlaces()
+  if (!spots) return
+  setProtectedSpots(spots)
+  log('INFO', `protecting ${spots.length} saved place(s) from digging`)
 }
 
 // The chests the bot remembers in this world, so it knows where things are from the start.
 async function loadChests() {
-  try {
-    const res = await fetch(`${backendUrl}/chests${worldQuery()}`, { signal: AbortSignal.timeout(5000) })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const chests = await res.json()
-    setChestMemory(chests)
-    log('INFO', `remembering ${chests.length} chest(s)`)
-  } catch (err) {
-    log('WARN', `couldn't load remembered chests from the backend (${describeFetchError(err)})`)
-  }
-}
-
-// Tell the backend what's in a chest the bot just opened. Fire and forget: the bot's own memory is
-// already up to date, and a lost update only means the agent's answer is a little stale.
-function reportChest(chest) {
-  fetch(`${backendUrl}/chests${worldQuery()}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(chest),
-    signal: AbortSignal.timeout(5000),
-  }).catch((err) => log('WARN', `couldn't report a chest to the backend (${describeFetchError(err)})`))
-}
-
-// Tell the backend a chest it remembers is gone.
-function forgetChest({ x, y, z, dimension }) {
-  const query = new URLSearchParams({ x, y, z, dimension, ...(currentWorldId() ? { world: currentWorldId() } : {}) })
-  fetch(`${backendUrl}/chests?${query}`, { method: 'DELETE', signal: AbortSignal.timeout(5000) })
-    .catch((err) => log('WARN', `couldn't tell the backend a chest is gone (${describeFetchError(err)})`))
+  const chests = await fetchChests()
+  if (!chests) return
+  setChestMemory(chests)
+  log('INFO', `remembering ${chests.length} chest(s)`)
 }
 
 // Tell the backend something happened, for the agent's journal ("Got 20 cobblestone.", "died at ...").
@@ -153,23 +84,11 @@ function forgetChest({ x, y, z, dimension }) {
 async function reportEvent(kind, text, { react = false } = {}) {
   const body = { kind, text }
   if (react && companion) Object.assign(body, { react: true, player: companion, state: safeSnapshot(companion) })
-  try {
-    const res = await fetch(`${backendUrl}/events${worldQuery()}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(react ? backendTimeoutMs : 5000),
-    })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    if (!react) return
-    const { reply, actions = [] } = await res.json()
-    if (reply) say(reply)
-    actions.forEach((action, i) => runAction(action, { first: i === 0 }))
-  } catch (err) {
-    log('WARN', `couldn't report an event to the backend (${describeFetchError(err)})`)
-  }
+  const reaction = await postEvent(body)
+  if (!reaction) return
+  if (reaction.reply) say(reaction.reply)
+  ;(reaction.actions ?? []).forEach((action, i) => runAction(action, { first: i === 0 }))
 }
-
 
 // Each job goes in the journal with the last thing the bot said about it (its result).
 setTaskListener((task, { cancelled }) => {
@@ -182,15 +101,6 @@ setTaskListener((task, { cancelled }) => {
     reportEvent('job', text, { react: soundsLikeFailure(result ?? '') })
   }
 })
-
-// Chat-ready message for a failed backend request.
-async function backendErrorMessage(err, res) {
-  if (err.name === 'TimeoutError') return 'my backend took too long to answer. Try again?'
-  if (!res) return `I can't reach my backend at ${backendUrl}. Is it running?`
-  // The backend sends {"error": "..."} written for the player; fall back to the status code.
-  const body = await res.json().catch(() => ({}))
-  return body.error ?? `my backend returned an error (HTTP ${res.status}).`
-}
 
 // Username of the player being followed, or null when staying put. Kept across reconnects.
 let followTarget = null

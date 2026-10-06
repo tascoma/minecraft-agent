@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { attackCooldownMs, bestWeapon, canAttack, findTarget, isAggressive } from '../combat.js'
+import { attackCooldownMs, bestWeapon, canAttack, findTarget, isAggressive } from '../reflexes/combat.js'
 import { Vec3 } from './helpers.js'
 
 const mob = (name, type, x = 0) => ({ name, type, position: new Vec3(x, 64, 0) })

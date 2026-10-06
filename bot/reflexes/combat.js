@@ -5,8 +5,8 @@
 // The rules about what may be hit live here, in the bot, not in the agent's instructions.
 import pathfinderPkg from 'mineflayer-pathfinder'
 import { aimPoint, someoneInTheWay } from './archery.js'
-import { startTask } from './tasks.js'
-import { goWithin } from './walk.js'
+import { startTask } from '../core/tasks.js'
+import { goWithin } from '../core/walk.js'
 
 const { goals } = pathfinderPkg
 

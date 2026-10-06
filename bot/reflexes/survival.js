@@ -4,7 +4,7 @@
 import pathfinderPkg from 'mineflayer-pathfinder'
 import { loader as autoEat } from 'mineflayer-auto-eat'
 import armorManager from 'mineflayer-armor-manager'
-import { goWithin } from './walk.js'
+import { goWithin } from '../core/walk.js'
 
 const { goals } = pathfinderPkg
 

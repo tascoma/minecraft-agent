@@ -14,7 +14,7 @@ The words this project uses for its own building blocks.
 
 **Action**: Something the agent wants the bot to do in the world, like follow or stay. The agent's tool records it as a `BotAction`; the backend sends it to the bot in the `/chat` response; the bot's action executor carries it out.
 
-**Action executor**: The part of `bot/index.js` (`runAction`) that takes actions from the backend and performs them with Mineflayer. Logs a warning for any action type it doesn't recognize.
+**Action executor**: The part of `bot/index.js` (`runAction` and `dispatch`) that takes actions from the backend and hands each to the job or command that performs it. The first action of a reply replaces what's running; the rest queue. Logs a warning for any action type it doesn't recognize.
 
 **Action tool**: A tool that changes the world (`follow_player`, `stay_here`, `come_here`, `go_to`, `go_to_place`, `teleport_to_player`, `recover_items`, `collect`, `give_items`, `make_item`, `attack`, `guard_area`, `hunt`, `harvest_crops`, `plant_crops`, `breed_animals`, `go_fishing`, `shear_sheep`, `build_shelter`, `place_block`, `light_up_area`, `pillar_up`, `bridge`, `store_items`, `take_items`, `check_chests`, `sort_chests`, `mine_for`, `build_nether_portal`, `enter_portal`, `throw_ender_eye`, `villager_trades`, `trade_with_villager`, `remember_note`, `forget_note`, `explore`, `pick_up_items`). It doesn't touch Minecraft itself; it adds a `BotAction` for the bot to carry out. Compare *query tool*.
 
@@ -32,23 +32,23 @@ The words this project uses for its own building blocks.
 
 **Functionality**: Something the player experiences, like "the bot follows me". Not a code unit: it's built from some combination of reflexes, tools and skills.
 
-**Job (task)**: Something that takes a while, like "get 20 cobblestone" or handing items over. One runs at a time (`bot/tasks.js`); "stop", any new command, or dying cancels it. Several jobs asked for in one reply queue up and run in turn; cancelling drops the queue too. The bot announces progress and the result in chat, and the job is in the state snapshot.
+**Job (task)**: Something that takes a while, like "get 20 cobblestone" or handing items over. One runs at a time (`bot/core/tasks.js`); "stop", any new command, or dying cancels it. Several jobs asked for in one reply queue up and run in turn; cancelling drops the queue too. The bot announces progress and the result in chat, and the job is in the state snapshot.
 
-**Guard job**: What `guard_area` starts: the bot stands at a spot (where the player is, or a saved place), fights hostile mobs within 12 blocks of it, and walks back after each fight, until the player gives another command (`guard` in `bot/combat.js`).
+**Guard job**: What `guard_area` starts: the bot stands at a spot (where the player is, or a saved place), fights hostile mobs within 12 blocks of it, and walks back after each fight, until the player gives another command (`guard` in `bot/reflexes/combat.js`).
 
-**Building jobs**: Placing a block, lighting an area, building a shelter or hut, bridging and pillaring (`bot/building.js`). They share one placer that builds bottom-up against something solid, steps out of the way of its own blocks, and gathers or crafts materials it's short of.
+**Building jobs**: Placing a block, lighting an area, building a shelter or hut, bridging and pillaring (`bot/jobs/building.js`). They share one placer that builds bottom-up against something solid, steps out of the way of its own blocks, and gathers or crafts materials it's short of.
 
 **Chest memory**: What's in every chest the bot has opened, per world, in `backend/data/worlds/<world id>/chests.json` (`services/chests.py`). The bot reports a chest each time it opens one and forgets ones it finds gone; the agent reads it with `find_item`. Only as fresh as the bot's last look.
 
-**Drop-off**: When the bot's inventory is full, it takes everything but tools, armor, food and torches to a chest near a saved place within 96 blocks, by itself when idle or in the middle of a gathering job (`bot/storage.js`).
+**Drop-off**: When the bot's inventory is full, it takes everything but tools, armor, food and torches to a chest near a saved place within 96 blocks, by itself when idle or in the middle of a gathering job (`bot/jobs/storage.js`).
 
-**Blueprint**: A small fixed building in `bot/building.js`: "shelter" (3x3 inside, 2-high walls) or "hut" (5x5 inside, 3-high walls), each with a roof and a door facing the player.
+**Blueprint**: A small fixed building in `bot/jobs/building.js`: "shelter" (3x3 inside, 2-high walls) or "hut" (5x5 inside, 3-high walls), each with a roof and a door facing the player.
 
 **Event**: A message the bot sends the backend when something happens (jobs finished, deaths, trips). It goes in the journal at no cost. A failed job or a death can also get a reaction from the agent, when `REACT_TO_EVENTS` is on: rate-limited and within the budget.
 
 **Memory**: Information the backend saves across restarts, per world: named places, chest contents, notes and the journal.
 
-**Farming jobs**: Hunting, harvesting, planting, breeding, fishing and shearing (`bot/farming.js`). Each runs as a job, waits out reflexes (a fight, eating) and carries on, and says up front if the inventory is full. Hunting skips babies and leaves the last two adults of a kind so they can still breed.
+**Farming jobs**: Hunting, harvesting, planting, breeding, fishing and shearing (`bot/jobs/farming.js`). Each runs as a job, waits out reflexes (a fight, eating) and carries on, and says up front if the inventory is full. Hunting skips babies and leaves the last two adults of a kind so they can still breed.
 
 **Journal**: What happened in a world: jobs finished (with how they turned out), deaths, trips to other dimensions. The bot reports them (`POST /events`), the backend keeps them per world (`journal.json`), and the agent sees the last few on every message and searches the rest with `recall`.
 
@@ -56,27 +56,27 @@ The words this project uses for its own building blocks.
 
 **Budget**: The most Claude may cost in an hour (`BUDGET_DOLLARS_PER_HOUR`, default $0.50). Past it the bot handles only stay, follow and come by itself until the hour's spend drops (`services/budget.py`).
 
-**Tip**: An unprompted chat message from a reflex in `bot/alerts.js` (nightfall, a storm, a creeper by the player, ore in view, the player low on health). Free, and spaced at least 90 seconds apart.
+**Tip**: An unprompted chat message from a reflex in `bot/reflexes/alerts.js` (nightfall, a storm, a creeper by the player, ore in view, the player low on health). Free, and spaced at least 90 seconds apart.
 
-**Mining trip**: What `mine_for` starts: look for an ore nearby, then dig down to the height it's most common at (diamonds around y -58, iron 16, gold -16) and tunnel outwards in 24-block legs until it has enough (`mineFor` in `bot/gathering.js`).
+**Mining trip**: What `mine_for` starts: look for an ore nearby, then dig down to the height it's most common at (diamonds around y -58, iron 16, gold -16) and tunnel outwards in 24-block legs until it has enough (`mineFor` in `bot/jobs/gathering.js`).
 
-**Line of fire**: The path an arrow would take, plus a few blocks past the target. The bot won't shoot if a player, villager or pet is within 2 blocks of it (`someoneInTheWay` in `bot/archery.js`).
+**Line of fire**: The path an arrow would take, plus a few blocks past the target. The bot won't shoot if a player, villager or pet is within 2 blocks of it (`someoneInTheWay` in `bot/reflexes/archery.js`).
 
-**Man-made block**: A block a player probably placed: planks, glass, bricks, doors, chests, beds, torches, farmland, crops and so on (`isManMade` in `bot/movements.js`). The bot never breaks these, even while gathering.
+**Man-made block**: A block a player probably placed: planks, glass, bricks, doors, chests, beds, torches, farmland, crops and so on (`isManMade` in `bot/core/movements.js`). The bot never breaks these, even while gathering.
 
-**Make job**: What `make_item` starts: craft or smelt an item, working out and doing every step, including gathering materials and making tools to gather them (`bot/crafting.js`).
+**Make job**: What `make_item` starts: craft or smelt an item, working out and doing every step, including gathering materials and making tools to gather them (`bot/jobs/crafting.js`).
 
 **Named place**: A position saved under a name ("home", "the mine") with `save_place`, kept per world in `backend/data/worlds/<world id>/places.json` so it survives restarts. The agent sees every saved name and its distance on each run. Sometimes called a waypoint.
 
 **Query tool**: A tool that reads the world instead of changing it: `check_inventory`, `look_around`, `nearby_entities`, `where_are_we`, `find_item`, `recall`. It answers from the state snapshot (or, for `find_item`, the chest memory). Compare *action tool*.
 
-**World id**: Which world the bot is in, so places and conversation memory stay separate per world. The bot takes it from the seed hash the server sends on login (`seed-b766…`), or from `MC_WORLD` if set, or the server address as a last resort (`bot/world.js`). Sent in the state snapshot as `world_id`.
+**World id**: Which world the bot is in, so places and conversation memory stay separate per world. The bot takes it from the seed hash the server sends on login (`seed-b766…`), or from `MC_WORLD` if set, or the server address as a last resort (`bot/core/world.js`). Sent in the state snapshot as `world_id`.
 
 **Protected area**: The 16 blocks (horizontally) around every saved place. The bot never digs or places blocks there.
 
-**Reflex**: Behavior the bot runs by itself, triggered by game events or timers, with no backend call and no tokens. Following the player is a reflex, and so are the survival reflexes in `bot/survival.js` (eat, armor, back off, escape lava and water, sleep) and the combat reflexes in `bot/combat.js` (fight back, defend the companion, back away from creepers). Used for anything time-critical, frequent, or obvious. A command from the player cancels a running reflex.
+**Reflex**: Behavior the bot runs by itself, triggered by game events or timers, with no backend call and no tokens. Following the player is a reflex, and so are the survival reflexes in `bot/reflexes/survival.js` (eat, armor, back off, escape lava and water, sleep) and the combat reflexes in `bot/reflexes/combat.js` (fight back, defend the companion, back away from creepers). Used for anything time-critical, frequent, or obvious. A command from the player cancels a running reflex.
 
-**State snapshot**: The bot's current situation, sent with every chat message: world id, health, food, position, dimension, time, weather, inventory, nearby blocks and entities, where the player is, where the bot last died, its current job, what it's fighting and who it's following. Built by `bot/state.js`, defined as `BotState` in the schema.
+**State snapshot**: The bot's current situation, sent with every chat message: world id, health, food, position, dimension, time, weather, inventory, nearby blocks and entities, where the player is, where the bot last died, its current job, what it's fighting and who it's following. Built by `bot/core/state.js`, defined as `BotState` in the schema.
 
 **Skill**: A `SKILL.md` playbook under `skills/` describing how to do something multi-step. The agent only sees each skill's name and description until it decides to load one. Skills are knowledge; tools are actions.
 
@@ -144,7 +144,7 @@ The words this project uses for its own building blocks.
 
 **Mineflayer**: The JavaScript library that lets code join Minecraft Java as a player. It handles the connection, world state, chat, inventory, digging, placing and crafting.
 
-**Movements**: The pathfinder settings that decide how the bot may move: whether it can dig (`canDig`: only during gathering jobs), how far it may drop, how much it avoids water, which doors it can open, and whether it may place blocks to climb or bridge (also only during jobs). This project's rules are in `bot/movements.js`.
+**Movements**: The pathfinder settings that decide how the bot may move: whether it can dig (`canDig`: only during gathering jobs), how far it may drop, how much it avoids water, which doors it can open, and whether it may place blocks to climb or bridge (also only during jobs). This project's rules are in `bot/core/movements.js`.
 
 **Offline mode (auth: 'offline')**: How the bot logs in: with just a username, no Microsoft account. The world it joins must allow offline players.
 
@@ -154,7 +154,7 @@ The words this project uses for its own building blocks.
 
 **Player chat**: A chat message typed by a player, which Minecraft sends with the sender's UUID. The bot only answers these, not server or command messages.
 
-**Plugin**: An add-on that extends Mineflayer, loaded with `bot.loadPlugin(...)`. In use: `mineflayer-pathfinder`, `mineflayer-auto-eat`, `mineflayer-armor-manager` and `mineflayer-tool`. Combat doesn't use `mineflayer-pvp` (unmaintained since 2021); `bot/combat.js` has its own short attack loop. (`mineflayer-collectblock` was tried and dropped: it could wait forever for an item drop.)
+**Plugin**: An add-on that extends Mineflayer, loaded with `bot.loadPlugin(...)`. In use: `mineflayer-pathfinder`, `mineflayer-auto-eat`, `mineflayer-armor-manager` and `mineflayer-tool`. Combat doesn't use `mineflayer-pvp` (unmaintained since 2021); `bot/reflexes/combat.js` has its own short attack loop. (`mineflayer-collectblock` was tried and dropped: it could wait forever for an item drop.)
 
 **Spawn**: The moment the bot appears in the world after connecting, or after dying. The bot sets up movement and starts following only after spawn.
 
@@ -205,7 +205,7 @@ The words this project uses for its own building blocks.
 
 **Durability**: How many more uses a tool or armor piece has before it breaks.
 
-**Smelting**: Cooking an item in a furnace with fuel: raw iron to iron ingots, sand to glass, logs to charcoal, raw meat to cooked. About 10 seconds per item. Minecraft data has no smelting recipes, so the common ones are listed in `bot/crafting.js`.
+**Smelting**: Cooking an item in a furnace with fuel: raw iron to iron ingots, sand to glass, logs to charcoal, raw meat to cooked. About 10 seconds per item. Minecraft data has no smelting recipes, so the common ones are listed in `bot/jobs/crafting.js`.
 
 **Hostile mob**: A mob that attacks players, such as a zombie, skeleton, spider or creeper. Most spawn in the dark.
 

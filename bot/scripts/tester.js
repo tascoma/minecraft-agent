@@ -2,7 +2,7 @@
 // and watches what the companion bot says. Needs the bot running and a world with cheats on.
 // Every check sets the time to day first.
 import mineflayer from 'mineflayer'
-import { isManMade } from '../movements.js'
+import { isManMade } from '../core/movements.js'
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const stamp = () => new Date().toISOString().slice(11, 19)

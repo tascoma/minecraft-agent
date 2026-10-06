@@ -51,15 +51,15 @@ The bot does one thing at a time: follow, stand still, or walk somewhere. When i
 | Remember named places ("this is home", "the mine") and go back to them | Tool + memory | `save_place`, `go_to_place`, `forget_place`; `backend/data/worlds/<world id>/places.json` | ✅ |
 | Say when it arrives or can't find a way | Bot | `pathfinder.goto` promise | ✅ |
 | Explore in a direction and report what it finds | Tool | `explore`: walks out in legs, notes biomes, villages, animals, exposed ore and lava, comes back and reports | ✅ |
-| Swim, climb ladders, open doors and gates | Reflex | `bot/movements.js` (wooden doors and gates; iron ones need redstone) | ✅ (stepping into a doorway from a dirt path or farmland needed a physics fix, `patches/prismarine-physics+1.11.1.patch`) |
-| Avoid lava, cliffs and deep water | Reflex | `bot/movements.js`: lava avoided, `maxDropDown` 3, `liquidCost` 5 | ✅ |
+| Swim, climb ladders, open doors and gates | Reflex | `bot/core/movements.js` (wooden doors and gates; iron ones need redstone) | ✅ (stepping into a doorway from a dirt path or farmland needed a physics fix, `patches/prismarine-physics+1.11.1.patch`) |
+| Avoid lava, cliffs and deep water | Reflex | `bot/core/movements.js`: lava avoided, `maxDropDown` 3, `liquidCost` 5 | ✅ |
 | Teleport to the player ("tp to me") | Tool | `teleport_to_player`, `/tp`; needs Allow Cheats on | ✅ |
 | Build up or bridge across gaps when stuck | Reflex | `Movements.scafoldingBlocks` with dirt or cobblestone; during gathering jobs only, never while following and never in protected areas | ✅ |
 | Stop whatever it's doing ("stop") | Tool | `stay_here` | ✅ |
 
 ## Phase 3: Staying alive (reflexes) ✅
 
-These run automatically, without being asked and without any tokens. They live in `bot/survival.js`. Any command from the player cancels a running reflex.
+These run automatically, without being asked and without any tokens. They live in `bot/reflexes/survival.js`. Any command from the player cancels a running reflex.
 
 Tested in game with a second player running commands (`/give`, `/damage`, `/summon husk`, `/kill`): eating, armor, backing off, sleeping and item recovery all work. Escaping lava, fire and deep water hasn't been tested in game yet.
 
@@ -76,9 +76,9 @@ Tested in game with a second player running commands (`/give`, `/damage`, `/summ
 
 ## Phase 4: Gathering resources ✅
 
-Gathering runs as a **job** (`bot/tasks.js`): one at a time, cancelled by "stop" or any new command. The bot reports progress and the result in chat itself, and the current job is in the state snapshot so the agent can say what it's doing.
+Gathering runs as a **job** (`bot/core/tasks.js`): one at a time, cancelled by "stop" or any new command. The bot reports progress and the result in chat itself, and the current job is in the state snapshot so the agent can say what it's doing.
 
-The bot digs only while gathering, never within 16 blocks (horizontally) of a saved place, and never through blocks a player probably placed (planks, glass, bricks, doors, chests, beds, farmland and so on; see `isManMade` in `bot/movements.js`). While following or walking it never digs or places blocks.
+The bot digs only while gathering, never within 16 blocks (horizontally) of a saved place, and never through blocks a player probably placed (planks, glass, bricks, doors, chests, beds, farmland and so on; see `isManMade` in `bot/core/movements.js`). While following or walking it never digs or places blocks.
 
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
@@ -96,7 +96,7 @@ Tested in game: logs, cobblestone without and with a pickaxe, stopping a job, an
 
 ## Phase 5: Crafting and smelting ✅
 
-One tool, `make_item(item, count)`, runs a job (`bot/crafting.js`) that works out the whole chain as it goes: logs → planks → sticks → crafting table → tool. It gathers missing raw materials and makes any tool it needs to gather them (a wooden pickaxe for stone, a stone pickaxe for iron). Interchangeable ingredients (any planks, any log, any cobblestone-like block, coal or charcoal) are planned together, and the exact recipe is picked when crafting from whatever the bot has. A crafting table or furnace within 16 blocks is used; otherwise the bot makes one, places it, and picks it back up afterwards (a furnace only with a pickaxe).
+One tool, `make_item(item, count)`, runs a job (`bot/jobs/crafting.js`) that works out the whole chain as it goes: logs → planks → sticks → crafting table → tool. It gathers missing raw materials and makes any tool it needs to gather them (a wooden pickaxe for stone, a stone pickaxe for iron). Interchangeable ingredients (any planks, any log, any cobblestone-like block, coal or charcoal) are planned together, and the exact recipe is picked when crafting from whatever the bot has. A crafting table or furnace within 16 blocks is used; otherwise the bot makes one, places it, and picks it back up afterwards (a furnace only with a pickaxe).
 
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
@@ -114,19 +114,19 @@ Tested in game (`npm run check:crafting`): a stone pickaxe from an empty invento
 
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
-| Fight back when attacked | Reflex | `bot/combat.js`, attacker from `entityHurt` | ✅ |
-| Defend the player from hostile mobs | Reflex | `bot/combat.js` | ✅ |
-| Attack a target on request ("kill that zombie") | Tool | `attack`, `bot/combat.js` | ✅ |
-| Guard an area or the base | Tool | `guard_area`, guard job in `bot/combat.js` | ✅ |
+| Fight back when attacked | Reflex | `bot/reflexes/combat.js`, attacker from `entityHurt` | ✅ |
+| Defend the player from hostile mobs | Reflex | `bot/reflexes/combat.js` | ✅ |
+| Attack a target on request ("kill that zombie") | Tool | `attack`, `bot/reflexes/combat.js` | ✅ |
+| Guard an area or the base | Tool | `guard_area`, guard job in `bot/reflexes/combat.js` | ✅ |
 | Back away from creepers instead of meleeing them | Reflex | creeper distance check | ✅ |
-| Use a bow and shield | Reflex | `bot/archery.js` (aim, line of fire), `bot.activateItem` | ✅ |
-| Never hit the player, pets or villagers | Reflex | target filter (`canAttack` in `bot/combat.js`) | ✅ |
+| Use a bow and shield | Reflex | `bot/reflexes/archery.js` (aim, line of fire), `bot.activateItem` | ✅ |
+| Never hit the player, pets or villagers | Reflex | target filter (`canAttack` in `bot/reflexes/combat.js`) | ✅ |
 
 ## Phase 7: Food and farming ✅
 
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
-| Hunt animals for food (cows, pigs, chickens, sheep) | Tool | `hunt`, `bot/farming.js` (skips babies, leaves the last two) | ✅ |
+| Hunt animals for food (cows, pigs, chickens, sheep) | Tool | `hunt`, `bot/jobs/farming.js` (skips babies, leaves the last two) | ✅ |
 | Cook raw meat | Tool | `make_item` (Phase 5); hunts the animal if there's no raw meat | ✅ |
 | Harvest and replant crops (wheat, carrots, potatoes) | Tool | `harvest_crops` | ✅ |
 | Start a farm: till soil near water and plant | Tool | `plant_crops` (makes a hoe; breaks grass for seeds) | ✅ |
@@ -141,7 +141,7 @@ Tested in game (`npm run check:crafting`): a stone pickaxe from an empty invento
 | Place a block where asked | Tool | `place_block` (at coordinates, a saved place or next to the player) | ✅ |
 | Light up an area with torches | Tool | `light_up_area`: block-light scan, torches 7 apart | ✅ |
 | Build a simple emergency shelter before night | Tool | `build_shelter` kind "shelter" (3x3 inside, door) | ✅ |
-| Build from a small blueprint (walls, floor, roof, door) | Tool | `build_shelter` kind "hut" (5x5 inside); `bot/building.js` blueprints | ✅ *Hut not tested in-game yet* |
+| Build from a small blueprint (walls, floor, roof, door) | Tool | `build_shelter` kind "hut" (5x5 inside); `bot/jobs/building.js` blueprints | ✅ *Hut not tested in-game yet* |
 | Bridge across a gap or pillar up | Tool | `bridge`, `pillar_up` | ✅ |
 | Place and fill a bed, chest, crafting table or furnace at the base | Tool | `place_block` with a saved place ("put a chest at home") | ✅ *Placing only; filling chests is Phase 9* |
 
@@ -160,7 +160,7 @@ Tested in game (`npm run check:crafting`): a stone pickaxe from an empty invento
 
 Multi-step goals that combine everything above. The agent plans them with skills and runs them as a series of tool calls, reporting progress as it goes.
 
-Several jobs asked for in one reply now queue and run in turn (`bot/tasks.js`), so a skill can lay out a whole plan ("make an iron pickaxe, then a sword, then armor") in one go.
+Several jobs asked for in one reply now queue and run in turn (`bot/core/tasks.js`), so a skill can lay out a whole plan ("make an iron pickaxe, then a sword, then armor") in one go.
 
 | Functionality | Type | Built on | Status |
 |---|---|---|---|
@@ -178,7 +178,7 @@ Several jobs asked for in one reply now queue and run in turn (`bot/tasks.js`), 
 |---|---|---|
 | Remember the last few things said, so follow-ups like "get it" work | Memory | ✅ |
 | Remember things about the player and past sessions (preferences, base locations, what happened) | Memory | ✅ Notes (`remember_note`, `forget_note`) and a journal of jobs, deaths and trips (`recall`), per world (`services/journal.py`); saved places and chests cover locations |
-| Give useful tips without being asked, at a sensible rate ("night in 1 minute") | Reflex → chat | ✅ Nightfall, thunderstorms, a creeper by the player, rare ore in view, the player low on health; tips at most every 90 s (`bot/alerts.js`) |
+| Give useful tips without being asked, at a sensible rate ("night in 1 minute") | Reflex → chat | ✅ Nightfall, thunderstorms, a creeper by the player, rare ore in view, the player low on health; tips at most every 90 s (`bot/reflexes/alerts.js`) |
 | Split up work ("you mine, I'll build") and report back when done | Tool + task system | ✅ The bot works a job (or a queue of them) while the player does their own thing, says the result in chat, and the journal tells the agent how it went |
 | Tell the player what it's currently doing on request | Tool | ✅ (status line: job, progress, queue, fight, following) |
 | Keep a token budget per hour so idle chatter can't run up costs | Backend | ✅ `BUDGET_DOLLARS_PER_HOUR` (default $0.50); past it, stay/follow/come still work without Claude (`services/budget.py`) |
@@ -189,7 +189,7 @@ Several jobs asked for in one reply now queue and run in turn (`bot/tasks.js`), 
 
 Phases 4 onward need these before they work well:
 
-1. **Task system.** *Done.* Jobs like "get 20 cobblestone" run one at a time, can be cancelled, and report progress and results in chat; several asked for in one reply queue up (`bot/tasks.js`); each one's result goes in the journal.
+1. **Task system.** *Done.* Jobs like "get 20 cobblestone" run one at a time, can be cancelled, and report progress and results in chat; several asked for in one reply queue up (`bot/core/tasks.js`); each one's result goes in the journal.
 2. **Bot → backend events.** *Done.* The bot reports jobs finished, deaths and trips (`POST /events`) into the journal, which the agent reads on its next message, at no cost. With `REACT_TO_EVENTS=true` a failed job or a death also gives the agent a turn to say or do something (or reply SKIP), at most every 2 minutes and within the budget.
 3. **Persistent memory.** *Done.* Named places, chest contents, notes and the journal are saved per world (`backend/data/worlds/<world id>/`), keyed by the world id the bot sends.
 4. **Safety rules.** *Done:* never attack players, villagers, golems or pets, or shoot with one in the line of fire; never dig or build by itself inside protected areas; never break blocks a player placed; only take from chests when asked. Enforced in the bot, not left to the model.

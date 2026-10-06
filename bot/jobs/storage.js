@@ -3,9 +3,9 @@
 // backend (per world), so it knows where things are without looking again.
 import { createRequire } from 'node:module'
 import pathfinderPkg from 'mineflayer-pathfinder'
-import { protectedPlaces } from './movements.js'
-import { currentTask, startTask } from './tasks.js'
-import { goWithin } from './walk.js'
+import { protectedPlaces } from '../core/movements.js'
+import { currentTask, startTask } from '../core/tasks.js'
+import { goWithin } from '../core/walk.js'
 
 const require = createRequire(import.meta.url)
 const { Vec3 } = require('vec3')

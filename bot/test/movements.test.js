@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
-import { exposed } from '../alerts.js'
-import { CompanionMovements, isManMade, isProtected, protectedRadius, setProtectedSpots } from '../movements.js'
+import { exposed } from '../reflexes/alerts.js'
+import { CompanionMovements, isManMade, isProtected, protectedRadius, setProtectedSpots } from '../core/movements.js'
 import { Vec3, blockState, fakeBot } from './helpers.js'
 
 describe('isManMade', () => {

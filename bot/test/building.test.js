@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { compass, facingFromYaw, layout, nextToPlace, pickMaterial, torchSpots } from '../building.js'
+import { compass, facingFromYaw, layout, nextToPlace, pickMaterial, torchSpots } from '../jobs/building.js'
 import { Vec3 } from './helpers.js'
 
 const origin = new Vec3(0, 64, 0)

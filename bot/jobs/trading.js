@@ -2,8 +2,8 @@
 // nearby sells it.
 import pathfinderPkg from 'mineflayer-pathfinder'
 import { itemMatches } from './storage.js'
-import { startTask } from './tasks.js'
-import { goWithin } from './walk.js'
+import { startTask } from '../core/tasks.js'
+import { goWithin } from '../core/walk.js'
 
 const { goals } = pathfinderPkg
 

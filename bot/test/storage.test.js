@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { chestPartner, itemMatches, keeps, sortPlan } from '../storage.js'
+import { chestPartner, itemMatches, keeps, sortPlan } from '../jobs/storage.js'
 import { Vec3 } from './helpers.js'
 
 describe('storage', () => {

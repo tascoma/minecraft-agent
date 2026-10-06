@@ -4,7 +4,7 @@
 // animals are tagged and only tagged ones are killed. Gives the bot shears, a fishing rod, wheat,
 // a furnace and coal. Use a test world with cheats on.
 // Run: npm run check:farming (with the backend and bot running)
-import { isManMade } from '../movements.js'
+import { isManMade } from '../core/movements.js'
 import { joinTester, sleep } from './tester.js'
 
 const tag = 'farming_check'

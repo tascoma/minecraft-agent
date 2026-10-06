@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { seedHash, setWorldFromLogin, currentWorldId } from '../world.js'
+import { seedHash, setWorldFromLogin, currentWorldId } from '../core/world.js'
 
 const where = { host: 'localhost', port: 25565 }
 

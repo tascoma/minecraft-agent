@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { portalLayout } from '../building.js'
-import { oreLevels, resolveTarget } from '../gathering.js'
-import { affordableTimes, describeTrade } from '../trading.js'
-import { bearing, describeFindings, readEye } from '../travel.js'
+import { portalLayout } from '../jobs/building.js'
+import { oreLevels, resolveTarget } from '../jobs/gathering.js'
+import { affordableTimes, describeTrade } from '../jobs/trading.js'
+import { bearing, describeFindings, readEye } from '../jobs/travel.js'
 import { registry, Vec3 } from './helpers.js'
 
 describe('progression', () => {

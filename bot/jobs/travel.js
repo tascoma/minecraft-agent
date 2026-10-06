@@ -1,10 +1,10 @@
 // Getting around the bigger world: walking through Nether portals (and following the player through
 // one by itself), and throwing an eye of ender to find the stronghold.
 import pathfinderPkg from 'mineflayer-pathfinder'
-import { exposed } from './alerts.js'
+import { exposed } from '../reflexes/alerts.js'
 import { directions, facingFromYaw } from './building.js'
-import { startTask } from './tasks.js'
-import { goWithin } from './walk.js'
+import { startTask } from '../core/tasks.js'
+import { goWithin } from '../core/walk.js'
 
 const { goals } = pathfinderPkg
 

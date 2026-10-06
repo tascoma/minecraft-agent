@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { nearlyBroken, resolveTarget } from '../gathering.js'
+import { nearlyBroken, resolveTarget } from '../jobs/gathering.js'
 import { registry } from './helpers.js'
 
 const names = (target) => target.blockIds.map((id) => registry.blocks[id].name).sort()

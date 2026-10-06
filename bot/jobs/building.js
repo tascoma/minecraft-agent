@@ -4,8 +4,8 @@
 // from logs, cobblestone by mining). Each runs as a job (see tasks.js) and reports in chat.
 import { createRequire } from 'node:module'
 import pathfinderPkg from 'mineflayer-pathfinder'
-import { startTask } from './tasks.js'
-import { goWithin } from './walk.js'
+import { startTask } from '../core/tasks.js'
+import { goWithin } from '../core/walk.js'
 
 const require = createRequire(import.meta.url)
 const { Vec3 } = require('vec3')

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
-import { cancelTask, currentTask, queued, soundsLikeFailure, startTask } from '../tasks.js'
+import { cancelTask, currentTask, queued, soundsLikeFailure, startTask } from '../core/tasks.js'
 
 const log = () => {}
 const tick = () => new Promise((r) => setTimeout(r, 0))

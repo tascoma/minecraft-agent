@@ -1,6 +1,6 @@
 // Builds the snapshot of the bot's situation that is sent to the backend with every chat.
-import { currentFight } from './combat.js'
-import { lastDeathInfo } from './survival.js'
+import { currentFight } from '../reflexes/combat.js'
+import { lastDeathInfo } from '../reflexes/survival.js'
 import { currentTask } from './tasks.js'
 import { currentWorldId } from './world.js'
 

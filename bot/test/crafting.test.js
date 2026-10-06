@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { describe, it } from 'node:test'
-import { chooseVariant, fuelValue, itemName, keyFor, requirements, smelting } from '../crafting.js'
+import { chooseVariant, fuelValue, itemName, keyFor, requirements, smelting } from '../jobs/crafting.js'
 import { registry } from './helpers.js'
 
 const require = createRequire(import.meta.url)
@@ -69,7 +69,7 @@ describe('smelting and fuel', () => {
 
 describe('plural', () => {
   it('pluralizes countable items and leaves mass nouns alone', async () => {
-    const { plural } = await import('../crafting.js')
+    const { plural } = await import('../jobs/crafting.js')
     assert.equal(plural(4, 'torch'), '4 torches')
     assert.equal(plural(2, 'stone_pickaxe'), '2 stone pickaxes')
     assert.equal(plural(1, 'stone_pickaxe'), '1 stone pickaxe')

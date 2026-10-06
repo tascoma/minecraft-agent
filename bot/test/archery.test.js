@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { aimPitch, aimPoint, arrowDrop, distanceToSegment, someoneInTheWay } from '../archery.js'
-import { mustNotHit } from '../combat.js'
+import { aimPitch, aimPoint, arrowDrop, distanceToSegment, someoneInTheWay } from '../reflexes/archery.js'
+import { mustNotHit } from '../reflexes/combat.js'
 import { Vec3 } from './helpers.js'
 
 describe('archery', () => {

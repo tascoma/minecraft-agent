@@ -2,9 +2,9 @@
 // items to the player. Both run as tasks (see tasks.js) and report back in chat themselves.
 import pathfinderPkg from 'mineflayer-pathfinder'
 import { plugin as toolPlugin } from 'mineflayer-tool'
-import { CompanionMovements, isManMade, isProtected } from './movements.js'
-import { startTask } from './tasks.js'
-import { goWithin } from './walk.js'
+import { CompanionMovements, isManMade, isProtected } from '../core/movements.js'
+import { startTask } from '../core/tasks.js'
+import { goWithin } from '../core/walk.js'
 
 const { goals } = pathfinderPkg
 
