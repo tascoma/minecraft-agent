@@ -16,7 +16,7 @@ The words this project uses for its own building blocks.
 
 **Action executor**: The part of `bot/index.js` (`runAction`) that takes actions from the backend and performs them with Mineflayer. Logs a warning for any action type it doesn't recognize.
 
-**Action tool**: A tool that changes the world (`follow_player`, `stay_here`, `come_here`, `go_to`, `go_to_place`, `teleport_to_player`, `recover_items`, `collect`, `give_items`, `make_item`, `attack`, `guard_area`, `hunt`, `harvest_crops`, `plant_crops`, `breed_animals`, `go_fishing`, `shear_sheep`, `build_shelter`, `place_block`, `light_up_area`, `pillar_up`, `bridge`, `store_items`, `take_items`, `check_chests`, `sort_chests`, `mine_for`, `build_nether_portal`, `enter_portal`, `throw_ender_eye`, `villager_trades`, `trade_with_villager`). It doesn't touch Minecraft itself; it adds a `BotAction` for the bot to carry out. Compare *query tool*.
+**Action tool**: A tool that changes the world (`follow_player`, `stay_here`, `come_here`, `go_to`, `go_to_place`, `teleport_to_player`, `recover_items`, `collect`, `give_items`, `make_item`, `attack`, `guard_area`, `hunt`, `harvest_crops`, `plant_crops`, `breed_animals`, `go_fishing`, `shear_sheep`, `build_shelter`, `place_block`, `light_up_area`, `pillar_up`, `bridge`, `store_items`, `take_items`, `check_chests`, `sort_chests`, `mine_for`, `build_nether_portal`, `enter_portal`, `throw_ender_eye`, `villager_trades`, `trade_with_villager`, `remember_note`, `forget_note`). It doesn't touch Minecraft itself; it adds a `BotAction` for the bot to carry out. Compare *query tool*.
 
 **Backend**: The Python process in `backend/`. The bot's "brain": it receives chat, runs the agent, and replies. It's the only part that costs tokens.
 
@@ -46,6 +46,14 @@ The words this project uses for its own building blocks.
 
 **Farming jobs**: Hunting, harvesting, planting, breeding, fishing and shearing (`bot/farming.js`). Each runs as a job, waits out reflexes (a fight, eating) and carries on, and says up front if the inventory is full. Hunting skips babies and leaves the last two adults of a kind so they can still breed.
 
+**Journal**: What happened in a world: jobs finished (with how they turned out), deaths, trips to other dimensions. The bot reports them (`POST /events`), the backend keeps them per world (`journal.json`), and the agent sees the last few on every message and searches the rest with `recall`.
+
+**Note**: Something the player asked the agent to remember for good ("the mine floods"), saved with `remember_note` per world (`notes.json`) and shown in the agent's instructions on every message.
+
+**Budget**: The most Claude may cost in an hour (`BUDGET_DOLLARS_PER_HOUR`, default $0.50). Past it the bot handles only stay, follow and come by itself until the hour's spend drops (`services/budget.py`).
+
+**Tip**: An unprompted chat message from a reflex in `bot/alerts.js` (nightfall, a storm, a creeper by the player, ore in view, the player low on health). Free, and spaced at least 90 seconds apart.
+
 **Mining trip**: What `mine_for` starts: look for an ore nearby, then dig down to the height it's most common at (diamonds around y -58, iron 16, gold -16) and tunnel outwards in 24-block legs until it has enough (`mineFor` in `bot/gathering.js`).
 
 **Line of fire**: The path an arrow would take, plus a few blocks past the target. The bot won't shoot if a player, villager or pet is within 2 blocks of it (`someoneInTheWay` in `bot/archery.js`).
@@ -56,7 +64,7 @@ The words this project uses for its own building blocks.
 
 **Named place**: A position saved under a name ("home", "the mine") with `save_place`, kept per world in `backend/data/worlds/<world id>/places.json` so it survives restarts. The agent sees every saved name and its distance on each run. Sometimes called a waypoint.
 
-**Query tool**: A tool that reads the world instead of changing it: `check_inventory`, `look_around`, `nearby_entities`, `where_are_we`, `find_item`. It answers from the state snapshot (or, for `find_item`, the chest memory). Compare *action tool*.
+**Query tool**: A tool that reads the world instead of changing it: `check_inventory`, `look_around`, `nearby_entities`, `where_are_we`, `find_item`, `recall`. It answers from the state snapshot (or, for `find_item`, the chest memory). Compare *action tool*.
 
 **World id**: Which world the bot is in, so places and conversation memory stay separate per world. The bot takes it from the seed hash the server sends on login (`seed-b766…`), or from `MC_WORLD` if set, or the server address as a last resort (`bot/world.js`). Sent in the state snapshot as `world_id`.
 
@@ -221,7 +229,7 @@ The words this project uses for its own building blocks.
 
 From [architecture.md](architecture.md), section 6. These aren't built yet, or only partly. (The state snapshot, named places, jobs and protected areas used to be listed here; they're now in *Project concepts*.)
 
-**Event**: A message the bot sends the backend when something needs a decision without the player chatting (a task finished, it's under attack). Each event costs tokens, so events are rate-limited.
+**Event**: A message the bot sends the backend when something happens. Today events only go in the journal (jobs finished, deaths, trips), at no token cost. Planned: events that make the agent decide something without the player chatting (it's under attack, a job failed), which would cost tokens and be rate-limited.
 
-**Memory**: Information the backend saves across restarts, per world. Named places and chest contents exist; notes about the player are still planned.
+**Memory**: Information the backend saves across restarts, per world: named places, chest contents, notes and the journal.
 

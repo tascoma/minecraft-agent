@@ -10,6 +10,7 @@ from app.core.config import REPO_ROOT, get_settings
 from app.schema.chat import BotAction, BotState
 from app.services import world
 from app.services.chests import ChestStore, distance, get_chest_store
+from app.services.journal import Journal, get_journal
 from app.services.places import Place, PlaceStore, get_place_store
 
 settings = get_settings()
@@ -25,6 +26,8 @@ class ChatDeps:
     places: PlaceStore = None  # type: ignore[assignment]
     # What's in the chests of that world, as of the bot's last look.
     chests: ChestStore = None  # type: ignore[assignment]
+    # Notes the player asked to keep, and what has happened in that world.
+    journal: Journal = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         world_id = self.state.world_id if self.state else None
@@ -32,6 +35,8 @@ class ChatDeps:
             self.places = get_place_store(world_id)
         if self.chests is None:
             self.chests = get_chest_store(world_id)
+        if self.journal is None:
+            self.journal = get_journal(world_id)
 
 
 agent = Agent(
@@ -446,6 +451,40 @@ def trade_with_villager(ctx: RunContext[ChatDeps], item: str, count: int = 1) ->
 
 
 @agent.tool
+def remember_note(ctx: RunContext[ChatDeps], note: str) -> str:
+    """Remember something for good, across sessions: a preference ("I like the base tidy"), a fact
+    about the world ("the mine floods"), a promise. Write it so it makes sense later on its own.
+    Only when the player asks you to remember something, or tells you something clearly worth keeping.
+    """
+    ctx.deps.journal.remember(note, by=ctx.deps.username)
+    return f'Remembered: {note}'
+
+
+@agent.tool
+def forget_note(ctx: RunContext[ChatDeps], about: str) -> str:
+    """Forget a note you were asked to remember, when the player says it's no longer true."""
+    dropped = ctx.deps.journal.forget(about)
+    if not dropped:
+        return f'No note about "{about}".'
+    return 'Forgot: ' + '; '.join(n.text for n in dropped)
+
+
+@agent.tool
+def recall(ctx: RunContext[ChatDeps], about: str) -> str:
+    """Look back through what happened in this world (jobs done, deaths, trips) and your notes, for
+    things older than the recent events you're shown: "when did you last die?", "what did we do
+    yesterday?", "did you get the diamonds?".
+    """
+    journal = ctx.deps.journal
+    events = journal.search(about)
+    found = [f'{journal.ago(e.at)}: {e.text}' for e in events]
+    notes_found = [n.text for n in journal.notes() if set(about.lower().split()) & set(n.text.lower().split())]
+    if not found and not notes_found:
+        return f'Nothing about "{about}" in your memory.'
+    return '\n'.join(found + [f'note: {n}' for n in notes_found])
+
+
+@agent.tool
 def go_to(ctx: RunContext[ChatDeps], x: int, z: int, y: int | None = None) -> str:
     """Walk to coordinates and wait there. Leave y out if the player only gave x and z."""
     ctx.deps.actions.append(BotAction(type='goto', x=x, y=y, z=z))
@@ -489,12 +528,22 @@ def forget_place(ctx: RunContext[ChatDeps], name: str) -> str:
 
 
 NO_STATE = "You can't sense the world right now."
+# How many recent events the agent sees on every run, and how far back.
+RECENT_EVENTS = 5
+RECENT_WITHIN_S = 3 * 3600
+
+
+# Instructions are sent in this order. The ones that rarely change come first, so prompt caching can
+# reuse them from one message to the next; the status line changes nearly every message, so it's last.
 
 
 @agent.instructions
-def status(ctx: RunContext[ChatDeps]) -> str:
-    """Health, hunger, position, time and weather, so every reply can take them into account."""
-    return world.describe_status(ctx.deps.state) if ctx.deps.state else NO_STATE
+def notes(ctx: RunContext[ChatDeps]) -> str:
+    """What the player asked the agent to remember, on every run."""
+    kept = ctx.deps.journal.notes()
+    if not kept:
+        return ''
+    return 'Things you were asked to remember (newest last):\n' + '\n'.join(f'- {n.by}: {n.text}' for n in kept)
 
 
 @agent.instructions
@@ -505,9 +554,25 @@ def known_chests(ctx: RunContext[ChatDeps]) -> str:
 
 
 @agent.instructions
+def recent_events(ctx: RunContext[ChatDeps]) -> str:
+    """The last few things that happened, so the agent knows how a job turned out."""
+    events = ctx.deps.journal.recent(RECENT_EVENTS, RECENT_WITHIN_S)
+    if not events:
+        return ''
+    lines = '\n'.join(f'- {ctx.deps.journal.ago(e.at)}: {e.text}' for e in events)
+    return f'What happened recently (newest last; use recall for older things):\n{lines}'
+
+
+@agent.instructions
 def saved_places(ctx: RunContext[ChatDeps]) -> str:
     """Saved place names, so the agent knows what "go home" refers to without a lookup."""
     return world.describe_places(ctx.deps.places.all(), ctx.deps.state)
+
+
+@agent.instructions
+def status(ctx: RunContext[ChatDeps]) -> str:
+    """Health, hunger, position, time and weather, so every reply can take them into account."""
+    return world.describe_status(ctx.deps.state) if ctx.deps.state else NO_STATE
 
 
 @agent.tool

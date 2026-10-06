@@ -1,15 +1,12 @@
 """Named places the player has asked the bot to remember, kept in a JSON file so they survive restarts."""
 
-import hashlib
-import json
-import re
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic import BaseModel, TypeAdapter
 
-from app.core.config import get_settings
 from app.schema.chat import ProtectedSpot
+from app.services.files import world_file, write_json
 
 
 class Place(BaseModel):
@@ -54,11 +51,7 @@ class PlaceStore:
         return True
 
     def _write(self, places: dict[str, Place]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        # Write to a temporary file first so a crash mid-write can't corrupt the saved places.
-        tmp = self.path.with_suffix('.tmp')
-        tmp.write_text(json.dumps({k: p.model_dump() for k, p in places.items()}, indent=2))
-        tmp.replace(self.path)
+        write_json(self.path, {k: p.model_dump() for k, p in places.items()})
 
 
 def protected_spots(store: PlaceStore) -> list[ProtectedSpot]:
@@ -66,19 +59,7 @@ def protected_spots(store: PlaceStore) -> list[ProtectedSpot]:
     return [ProtectedSpot(x=p.x, y=p.y, z=p.z, dimension=p.dimension) for p in store.all()]
 
 
-def world_dir_name(world_id: str) -> str:
-    """A safe folder name for a world id, which can hold characters like ':' or '/'."""
-    slug = re.sub(r'[^A-Za-z0-9._-]+', '_', world_id).strip('._')[:40]
-    if slug == world_id:
-        return slug
-    # Different ids can share a slug ("a:b" and "a/b"); the hash keeps their folders apart.
-    return f'{slug}-{hashlib.sha1(world_id.encode()).hexdigest()[:8]}'.lstrip('-')
-
-
 @lru_cache
 def get_place_store(world_id: str | None = None) -> PlaceStore:
     """The places for one world. Without a world id (an older bot) it is the original shared file."""
-    data_dir = get_settings().data_dir
-    if world_id is None:
-        return PlaceStore(data_dir / 'places.json')
-    return PlaceStore(data_dir / 'worlds' / world_dir_name(world_id) / 'places.json')
+    return PlaceStore(world_file(world_id, 'places.json'))

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
+import { exposed } from '../alerts.js'
 import { CompanionMovements, isManMade, isProtected, protectedRadius, setProtectedSpots } from '../movements.js'
 import { Vec3, blockState, fakeBot } from './helpers.js'
 
@@ -87,5 +88,15 @@ describe('CompanionMovements', () => {
     assert.ok(walking.placeCost > gathering.placeCost)
     assert.ok(walking.canDig, 'can still dig out of a hole')
     assert.equal(walking.maxDropDown, 3)
+  })
+})
+
+describe('alerts', () => {
+  it('only points out ore you could actually see', () => {
+    const bot = fakeBot()
+    bot.stateId = blockState('stone')
+    assert.equal(exposed(bot, new Vec3(0, 0, 0)), false, 'buried in stone')
+    bot.stateId = blockState('air')
+    assert.equal(exposed(bot, new Vec3(0, 0, 0)), true, 'open to the air')
   })
 })

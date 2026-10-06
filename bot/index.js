@@ -14,7 +14,7 @@ import { installStorage, setChestMemory } from './storage.js'
 import { installSurvival } from './survival.js'
 import { installTrading } from './trading.js'
 import { installTravel } from './travel.js'
-import { cancelTask, currentTask, queued } from './tasks.js'
+import { cancelTask, currentTask, queued, setTaskListener } from './tasks.js'
 import { currentWorldId, setWorldFromLogin } from './world.js'
 
 const { pathfinder, goals } = pathfinderPkg
@@ -50,7 +50,11 @@ function log(level, message) {
   ;(level === 'ERROR' ? console.error : console.log)(line)
 }
 
+// What the bot said during the current job, so the journal can record how it turned out.
+let saidDuringJob = []
+
 function say(message) {
+  if (currentTask()) saidDuringJob.push(message)
   try {
     // Minecraft chat messages are capped at 256 characters.
     bot.chat(message.slice(0, 256))
@@ -142,6 +146,28 @@ function forgetChest({ x, y, z, dimension }) {
   fetch(`${backendUrl}/chests?${query}`, { method: 'DELETE', signal: AbortSignal.timeout(5000) })
     .catch((err) => log('WARN', `couldn't tell the backend a chest is gone (${describeFetchError(err)})`))
 }
+
+// Tell the backend something happened, for the agent's journal ("Got 20 cobblestone.", "died at ...").
+// No model call on the other end, so it costs nothing.
+function reportEvent(kind, text) {
+  fetch(`${backendUrl}/events${worldQuery()}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind, text }),
+    signal: AbortSignal.timeout(5000),
+  }).catch((err) => log('WARN', `couldn't report an event to the backend (${describeFetchError(err)})`))
+}
+
+// Each job goes in the journal with the last thing the bot said about it (its result).
+setTaskListener((task, { cancelled }) => {
+  const result = saidDuringJob.at(-1)
+  saidDuringJob = []
+  if (cancelled) {
+    reportEvent('job', `stopped ${task.description}${task.progress ? ` at ${task.progress}` : ''}`)
+  } else {
+    reportEvent('job', `${task.description}: ${result ?? 'done'}`)
+  }
+})
 
 // Chat-ready message for a failed backend request.
 async function backendErrorMessage(err, res) {
@@ -353,7 +379,7 @@ function connect() {
       const player = Object.keys(bot.players).find((name) => name !== bot.username)
       if (player) follow(player)
     }
-    installAlerts(bot, say)
+    installAlerts(bot, say, { companion: () => companion })
     survival = installSurvival(bot, { say, log, companion: () => companion, resume })
     combat = installCombat(bot, { say, log, survival, companion: () => companion })
     gathering = installGathering(bot, { say, log, survival, resume })
@@ -404,8 +430,16 @@ function connect() {
 
   bot.on('death', () => {
     log('WARN', 'died')
+    const { x, y, z } = bot.entity.position.floored()
+    reportEvent('death', `died at (${x}, ${y}, ${z}) in the ${bot.game.dimension.replace(/^the_/, '')}`)
     // The items are gone and the bot respawns far away; a job can't sensibly carry on.
     cancelTask()
+  })
+  let dimension = null
+  bot.on('spawn', () => {
+    // A spawn in another dimension is a trip through a portal (or a respawn back home).
+    if (dimension && bot.game.dimension !== dimension) reportEvent('travel', `went to the ${bot.game.dimension.replace(/^the_/, '')}`)
+    dimension = bot.game.dimension
   })
   bot.on('respawn', () => {
     log('INFO', 'respawned')

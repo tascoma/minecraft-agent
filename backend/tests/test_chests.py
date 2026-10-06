@@ -64,7 +64,9 @@ def test_storage_tools_queue_actions(tmp_path):
 
 
 def test_bot_reports_and_fetches_chests(tmp_path, monkeypatch):
-    monkeypatch.setattr(chests_module, 'get_settings', lambda: SimpleNamespace(data_dir=tmp_path))
+    from app.services import files
+
+    monkeypatch.setattr(files, 'get_settings', lambda: SimpleNamespace(data_dir=tmp_path))
     chests_module.get_chest_store.cache_clear()
     client = TestClient(app)
     chest = {'x': 1, 'y': 64, 'z': 2, 'dimension': 'overworld', 'items': {'bread': 3}}

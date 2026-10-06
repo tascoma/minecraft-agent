@@ -4,16 +4,14 @@ The bot sends a chest's contents every time it opens one, so this is as fresh as
 players can change a chest in between.
 """
 
-import json
 import time
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic import BaseModel, TypeAdapter
 
-from app.core.config import get_settings
 from app.schema.chat import Position
-from app.services.places import world_dir_name
+from app.services.files import world_file, write_json
 
 
 class Chest(BaseModel):
@@ -60,11 +58,7 @@ class ChestStore:
             self._write(chests)
 
     def _write(self, chests: dict[str, Chest]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        # Write to a temporary file first so a crash mid-write can't corrupt the record.
-        tmp = self.path.with_suffix('.tmp')
-        tmp.write_text(json.dumps({k: c.model_dump() for k, c in chests.items()}, indent=2))
-        tmp.replace(self.path)
+        write_json(self.path, {k: c.model_dump() for k, c in chests.items()})
 
     def find(self, item: str) -> list[tuple[Chest, dict[str, int]]]:
         """Chests holding something matching `item`, with the matching items, most first."""
@@ -83,7 +77,4 @@ def distance(chest: Chest, pos: Position) -> float:
 @lru_cache
 def get_chest_store(world_id: str | None = None) -> ChestStore:
     """The chests of one world; without a world id (an older bot), one shared file."""
-    data_dir = get_settings().data_dir
-    if world_id is None:
-        return ChestStore(data_dir / 'chests.json')
-    return ChestStore(data_dir / 'worlds' / world_dir_name(world_id) / 'chests.json')
+    return ChestStore(world_file(world_id, 'chests.json'))

@@ -8,6 +8,12 @@ let current = null
 const queue = []
 // While true, startTask queues a job behind the current one instead of replacing it.
 let queueing = false
+// Told when each job ends: (task, { cancelled }). Set by index.js to report jobs to the journal.
+let onSettled = null
+
+export function setTaskListener(fn) {
+  onSettled = fn
+}
 
 // What the bot is busy with, for the state snapshot; null when idle.
 export function currentTask() {
@@ -49,6 +55,7 @@ function begin(description, run, { log, onCancel, onEnd }) {
     .catch((err) => log('ERROR', `task "${description}" failed: ${err.stack ?? err}`))
     .finally(() => {
       log('INFO', `task ${task.cancelled ? 'cancelled' : 'finished'}: ${description}`)
+      onSettled?.(task, { cancelled: task.cancelled })
       if (current === task) current = null
       if (task.cancelled) return
       const next = queue.shift()

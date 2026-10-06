@@ -5,12 +5,16 @@ from fastapi import APIRouter
 from pydantic_ai import capture_run_messages
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.usage import RunUsage
 
 from app.agents.agent import ChatDeps, agent
 from app.schema.chat import BotAction, ChatRequest, ChatResponse, ProtectedSpot
 from app.services import world
 from app.services.memory import memory
+from app.core.config import get_settings
+from app.services.budget import Budget, basic_command
 from app.services.chests import Chest, get_chest_store
+from app.services.journal import Event, get_journal
 from app.services.places import get_place_store, protected_spots
 
 logger = logging.getLogger(__name__)
@@ -18,6 +22,32 @@ router = APIRouter()
 
 # Said in chat when the agent's tools ran but it never wrote any reply text at all.
 FALLBACK_REPLY = 'On it!'
+
+settings = get_settings()
+budget = Budget(settings.budget_dollars_per_hour, settings.model_name)
+
+
+def usage_of(messages: list[ModelMessage]) -> RunUsage:
+    """The token usage of a run's model responses, for a run that failed before giving a result."""
+    usage = RunUsage()
+    for message in messages:
+        if isinstance(message, ModelResponse):
+            usage.incr(message.usage)
+    return usage
+
+
+def over_budget(request: ChatRequest) -> ChatResponse:
+    """The reply when the hour's Claude budget is spent: handle the basic commands without the agent."""
+    wait = f'about {budget.minutes_until_free()} min'
+    command = basic_command(request.message)
+    if command == 'stay':
+        return ChatResponse(reply='Stopping.', actions=[BotAction(type='stay')])
+    if command in ('follow', 'come'):
+        return ChatResponse(reply='Coming!', actions=[BotAction(type=command, username=request.username)])
+    return ChatResponse(
+        reply=f"I've used my thinking budget for this hour, so I can only follow, stay or come for {wait}. "
+        'I still fight, eat and keep myself safe.'
+    )
 
 
 def last_text(messages: list[ModelMessage]) -> str | None:
@@ -74,9 +104,19 @@ async def forget_chest(x: int, y: int, z: int, dimension: str, world: str | None
     get_chest_store(world or None).remove(x, y, z, dimension)
 
 
+@router.post('/events')
+async def record_event(event: Event, world: str | None = None) -> None:
+    """The bot reports something that happened (a job finished, it died, it changed dimension).
+    Just recorded for the agent to read later; no model call."""
+    get_journal(world or None).record(event)
+
+
 @router.post('/chat')
 async def chat(request: ChatRequest) -> ChatResponse:
     logger.info('chat from %s: %s', request.username, request.message)
+    if budget.exhausted():
+        logger.warning('over the budget of $%.2f/hour (spent $%.3f); not calling the agent', budget.dollars_per_hour, budget.spent())
+        return over_budget(request)
     if request.state:
         logger.info(world.describe_status(request.state))
     started = time.perf_counter()
@@ -88,6 +128,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             result = await agent.run(prompt, deps=deps, message_history=memory.history(request.username, world_id))
         except UnexpectedModelBehavior:
             log_messages(messages, failed=True)
+            budget.record(usage_of(messages))
             # The tools already did their job (e.g. queued "follow"); don't throw that away
             # just because the model ended with an empty message. Use what it said earlier.
             if deps.actions:
@@ -101,14 +142,16 @@ async def chat(request: ChatRequest) -> ChatResponse:
             raise
         except Exception:
             log_messages(messages, failed=True)
+            budget.record(usage_of(messages))
             logger.exception('agent run failed for message from %s', request.username)
             raise
 
     log_messages(result.new_messages())
     memory.remember(request.username, result.new_messages(), world_id)
     usage = result.usage
+    cost = budget.record(usage)
     logger.info(
-        'reply to %s (%.1fs, %d in (%d cached, %d cache writes) / %d out tokens, %d requests): %s',
+        'reply to %s (%.1fs, %d in (%d cached, %d cache writes) / %d out tokens, %d requests, $%.4f, $%.3f this hour): %s',
         request.username,
         time.perf_counter() - started,
         usage.input_tokens,
@@ -116,6 +159,8 @@ async def chat(request: ChatRequest) -> ChatResponse:
         usage.cache_write_tokens,
         usage.output_tokens,
         usage.requests,
+        cost,
+        budget.spent(),
         result.output,
     )
     return ChatResponse(

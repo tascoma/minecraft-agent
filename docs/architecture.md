@@ -235,6 +235,9 @@ backend/app/
   services/world.py          turns the bot's state snapshot into text for the agent
   services/places.py         named places, saved per world to backend/data/worlds/<id>/places.json
   services/chests.py         chest contents, saved per world to backend/data/worlds/<id>/chests.json
+  services/journal.py        notes and the journal of what happened, per world (notes.json, journal.json)
+  services/budget.py         the spending limit per hour, and the commands handled without Claude past it
+  services/files.py          per-world data file paths and safe JSON writes
   services/memory.py         each player's recent exchanges per world, in memory only
   schema/chat.py             ChatRequest, ChatResponse, BotAction, BotState
 backend/data/                things the agent remembers between runs, per world (gitignored)
@@ -248,7 +251,7 @@ backend/logs/
 
 ### The bot ↔ backend contract
 
-Chat goes through `POST /chat` (below). Besides that, the bot fetches saved places (`GET /places`) and remembered chests (`GET /chests`) when it joins, and reports chests as it opens them (`POST /chests`, `DELETE /chests`).
+Chat goes through `POST /chat` (below). Besides that, the bot fetches saved places (`GET /places`) and remembered chests (`GET /chests`) when it joins, reports chests as it opens them (`POST /chests`, `DELETE /chests`), and reports what happens (`POST /events`: jobs finished, deaths, trips) for the journal. None of these call Claude.
 
 ```jsonc
 // request (bot → backend); state is built by bot/state.js
@@ -326,9 +329,9 @@ flowchart LR
 
 1. **Task queue in the bot.** *Done:* one job at a time with progress, cancel and a result in chat, and jobs from the same reply queue behind it (`bot/tasks.js`). The first action of a reply replaces what's running; the rest wait their turn. Every job waits out reflexes and carries on.
 2. **State snapshot** ✅. Each request includes health, hunger, position, time, inventory and nearby points of interest, so the agent decides with real information instead of guessing.
-3. **Events endpoint.** The bot calls `POST /events` when something needs a decision (a task finished, it's under attack). Events cost tokens, so the bot handles anything a reflex can, and rate-limits the rest.
-4. **Memory.** Named places and chest contents are done (`services/places.py`, `services/chests.py`); the bot reports a chest each time it opens one (`POST /chests`), loads them on join (`GET /chests`) and reports chests it finds gone (`DELETE /chests`). It also remembers where it last died, in memory only. Still to come: notes about the player.
-5. **Tool groups.** The agent now has 40 tools, all sent on every request. Grouping them (movement, gathering, crafting, combat, farming, building, storage) into toolsets or capabilities would keep the list readable and could let the agent load groups only when needed, which also saves tokens.
+3. **Events endpoint.** *Partly done.* `POST /events` records jobs finished, deaths and trips in the journal, which the agent reads on its next message. Still to come: events that make the agent decide something on its own (it's under attack, a job failed), which cost tokens and need rate limits.
+4. **Memory.** Named places and chest contents are done (`services/places.py`, `services/chests.py`); the bot reports a chest each time it opens one (`POST /chests`), loads them on join (`GET /chests`) and reports chests it finds gone (`DELETE /chests`). It also remembers where it last died, in memory only. Notes the player asks it to keep, and a journal of what happened, are in `services/journal.py`; the agent sees the notes and the last few events on every message, and searches older ones with `recall`.
+5. **Tool groups.** The agent now has 43 tools, all sent on every request. Grouping them (movement, gathering, crafting, combat, farming, building, storage) into toolsets or capabilities would keep the list readable and could let the agent load groups only when needed, which also saves tokens.
 
 ---
 
@@ -363,4 +366,6 @@ If you upgrade `mineflayer-pathfinder`, check whether the patch is still needed.
 - **Placing blocks:** the bot builds bottom-up against something solid, steps clear of a block its own body overlaps (the server refuses it otherwise), and holds jump while pillaring (letting go before placing makes the server refuse the block).
 - **Hunting leaves breeders.** It skips babies and the last two adults of a kind within 32 blocks (animals only; monsters don't breed).
 - **Portals only on purpose.** The pathfinder treats portal blocks as off-limits, so the bot never wanders into one; going through steps in by hand, and lighting a portal is done from in front of the frame.
+- **Spending is capped:** `BUDGET_DOLLARS_PER_HOUR` (default $0.50) over a rolling hour, priced from each run's tokens (cache reads at a tenth, writes at 1.25×). Past it the agent isn't called; stay, follow and come are matched by keyword instead.
+- **Instructions are ordered for caching:** what rarely changes (notes, chests) comes first and the status line last, so a message reuses as much of the last one's prompt as possible.
 - **Mining trips are bounded:** three tries to get down to the ore's height (5 minutes each), then at most six 24-block tunnels.

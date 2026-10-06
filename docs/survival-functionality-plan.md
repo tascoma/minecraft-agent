@@ -172,16 +172,16 @@ Several jobs asked for in one reply now queue and run in turn (`bot/tasks.js`), 
 | Find a stronghold and prepare for the End | Tool + skill | `throw_ender_eye` reads the eye's direction; `the-end` | ✅ |
 | Trade with villagers | Tool | `villager_trades`, `trade_with_villager` | ✅ |
 
-## Phase 11: Being a good companion
+## Phase 11: Being a good companion ✅
 
 | Functionality | Type | Status |
 |---|---|---|
 | Remember the last few things said, so follow-ups like "get it" work | Memory | ✅ |
-| Remember things about the player and past sessions (preferences, base locations, what happened) | Memory | 🔲 |
-| Give useful tips without being asked, at a sensible rate ("night in 1 minute") | Reflex → chat | 🔲 *Night and low-health warnings only (`bot/alerts.js`)* |
-| Split up work ("you mine, I'll build") and report back when done | Tool + task system | 🔲 |
-| Tell the player what it's currently doing on request | Tool | ✅ (status line: job, progress, fight) |
-| Keep a token budget per hour so idle chatter can't run up costs | Backend | 🔲 |
+| Remember things about the player and past sessions (preferences, base locations, what happened) | Memory | ✅ Notes (`remember_note`, `forget_note`) and a journal of jobs, deaths and trips (`recall`), per world (`services/journal.py`); saved places and chests cover locations |
+| Give useful tips without being asked, at a sensible rate ("night in 1 minute") | Reflex → chat | ✅ Nightfall, thunderstorms, a creeper by the player, rare ore in view, the player low on health; tips at most every 90 s (`bot/alerts.js`) |
+| Split up work ("you mine, I'll build") and report back when done | Tool + task system | ✅ The bot works a job (or a queue of them) while the player does their own thing, says the result in chat, and the journal tells the agent how it went |
+| Tell the player what it's currently doing on request | Tool | ✅ (status line: job, progress, queue, fight, following) |
+| Keep a token budget per hour so idle chatter can't run up costs | Backend | ✅ `BUDGET_DOLLARS_PER_HOUR` (default $0.50); past it, stay/follow/come still work without Claude (`services/budget.py`) |
 
 ---
 
@@ -189,9 +189,9 @@ Several jobs asked for in one reply now queue and run in turn (`bot/tasks.js`), 
 
 Phases 4 onward need these before they work well:
 
-1. **Task system.** *Mostly done.* Jobs like "get 20 cobblestone" run one at a time, can be cancelled, and report progress and results in chat; several asked for in one reply queue up (`bot/tasks.js`). Still to come: telling the agent when a job ends (needs bot → backend events).
-2. **Bot → backend events.** The bot reports things that happen (task finished, under attack, low health) so the agent can react, not only when the player chats. Each event costs tokens, so they must be rate-limited and only sent when the agent needs to decide something.
-3. **Persistent memory.** *Partly done.* Named places and chest contents are saved per world (`backend/data/worlds/<world id>/`), keyed by the world id the bot sends. Player notes should go in the same folder.
+1. **Task system.** *Done.* Jobs like "get 20 cobblestone" run one at a time, can be cancelled, and report progress and results in chat; several asked for in one reply queue up (`bot/tasks.js`); each one's result goes in the journal.
+2. **Bot → backend events.** *Partly done.* The bot reports jobs finished, deaths and trips (`POST /events`) into the journal, which the agent reads on its next message: no tokens at the time. Still to come: events that make the agent act on its own (attacked, task failed), which would cost tokens and need rate limits.
+3. **Persistent memory.** *Done.* Named places, chest contents, notes and the journal are saved per world (`backend/data/worlds/<world id>/`), keyed by the world id the bot sends.
 4. **Safety rules.** *Done:* never attack players, villagers, golems or pets, or shoot with one in the line of fire; never dig or build by itself inside protected areas; never break blocks a player placed; only take from chests when asked. Enforced in the bot, not left to the model.
 5. **Tests.** *Done for Phases 1–9:* backend unit tests (`uv run pytest`), bot unit tests (`npm test`), and an in-game check per phase with a second player (`npm run check:survival`, `check:gathering`, `check:crafting`, `check:combat`, `check:farming`, `check:building`, `check:storage`). Each new phase should add to all three.
 
@@ -201,4 +201,4 @@ Phases 4 onward need these before they work well:
 2. ~~Phase 3 (staying alive)~~ done. ~~Phase 6 reflexes (fighting back)~~ done, using a small attack loop instead of `mineflayer-pvp` (unmaintained since 2021). Guarding, the bow and the shield are done too, so Phase 6 is complete.
 3. ~~Phases 4 and 5 (gathering, crafting)~~ done. The bot can now go from nothing to stone tools, torches and iron ingots by itself.
 4. ~~Phases 7–9 (food and farming, building, base and storage)~~ done.
-5. ~~Phase 10 (progression goals)~~ done. Phase 11 (companionship) is next.
+5. ~~Phases 10–11 (progression goals, companionship)~~ done. What's left is the open rows above, the cross-cutting events that let the agent act by itself, and the doorway bug (Phase 2).
