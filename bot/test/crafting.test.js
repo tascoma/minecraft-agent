@@ -76,6 +76,8 @@ describe('plural', () => {
     assert.equal(plural(8, 'cobblestone'), '8 cobblestone')
     assert.equal(plural(3, 'iron_ingot'), '3 iron ingots')
     assert.equal(plural(2, 'glass'), '2 glass')
+    assert.equal(plural(4, 'oak_planks'), '4 oak planks', 'already plural')
+    assert.equal(plural(2, 'iron_boots'), '2 iron boots')
   })
 })
 

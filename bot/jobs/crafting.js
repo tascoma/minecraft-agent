@@ -98,8 +98,9 @@ const pretty = (name) => name.replace(/^family:/, '').replaceAll('_', ' ')
 const massNouns = /(cobblestone|stone|glass|dirt|sand|gravel|coal|charcoal|clay|wool|bread|kelp|brick|iron|gold|copper)$/
 export function plural(count, name) {
   const words = pretty(name)
-  if (count === 1 || massNouns.test(words)) return `${count} ${words}`
-  return `${count} ${/(ch|sh|s|x)$/.test(words) ? `${words}es` : `${words}s`}`
+  // Names ending in one "s" are already plural in Minecraft: oak_planks, wheat_seeds, shears, iron_boots.
+  if (count === 1 || massNouns.test(words) || /[^s]s$/.test(words)) return `${count} ${words}`
+  return `${count} ${/(ch|sh|ss|x)$/.test(words) ? `${words}es` : `${words}s`}`
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 // Blocks a workstation can be placed into.
