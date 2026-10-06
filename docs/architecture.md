@@ -145,7 +145,7 @@ A **functionality** is something the player experiences, such as "the bot follow
 | Gets a full set of iron gear | Eat, fight back, pick up drops | `mine_for`, queued `make_item` calls | `iron-gear` |
 | Takes me to the Nether | Follow through the portal | `build_nether_portal`, `enter_portal`, `hunt` "blaze" | `nether` |
 
-The full list is in [survival-functionality-plan.md](survival-functionality-plan.md).
+The full list is in [the survival functionality plan](plans/archive/survival-functionality-plan.md).
 
 ### Capability (Pydantic AI term)
 

@@ -2,7 +2,7 @@
 
 Terms used in this project and its docs, grouped by area. Within each group, terms are in alphabetical order.
 
-See [architecture.md](architecture.md) for how the pieces fit together, and [survival-functionality-plan.md](survival-functionality-plan.md) for what's planned.
+See [architecture.md](architecture.md) for how the pieces fit together, and [the survival functionality plan](plans/archive/survival-functionality-plan.md) (archived) for what was planned and built.
 
 **Contents:** [Project concepts](#project-concepts) · [AI and the agent](#ai-and-the-agent) · [Bot and Mineflayer](#bot-and-mineflayer) · [Backend and tooling](#backend-and-tooling) · [Minecraft](#minecraft)
 

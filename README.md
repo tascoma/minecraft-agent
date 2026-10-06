@@ -13,7 +13,7 @@ You (in Minecraft) ⇄ Minecraft server ⇄ Mineflayer bot (bot/, Node)
 - **`bot/`**: a [Mineflayer](https://github.com/PrismarineJS/mineflayer) bot. It sends your chat (plus a snapshot of its health, inventory and surroundings) to the backend, says the reply, and carries out the agent's actions as jobs (gathering, crafting, farming, building, storage). Reflexes like following, eating, fighting and backing off from mobs run here with no tokens.
 - **`backend/`**: FastAPI app with the Pydantic AI agent (`app/agents/agent.py`), its tools, a `POST /chat` endpoint, and per-world memory of saved places and chest contents.
 - **`skills/`**: `SKILL.md` files the agent loads only when it needs them (for example `survive-first-night`).
-- **`docs/`**: [architecture](docs/architecture.md) (how it fits together), the [survival functionality plan](docs/survival-functionality-plan.md) (what's done and what's next) and a [glossary](docs/glossary.md).
+- **`docs/`**: [architecture](docs/architecture.md) (how it fits together), the [survival functionality plan](docs/plans/archive/survival-functionality-plan.md) (archived: what was planned and built) and a [glossary](docs/glossary.md).
 
 Requires **Minecraft Java Edition**. Mineflayer does not support Bedrock.
 
@@ -99,7 +99,7 @@ npm run check:extras       # worn pickaxe replaced, drops picked up after a kill
 
 ## Roadmap
 
-The full list is in [docs/survival-functionality-plan.md](docs/survival-functionality-plan.md).
+The full list is in [docs/plans/archive/survival-functionality-plan.md](docs/plans/archive/survival-functionality-plan.md).
 
 - [x] Chat buddy: joins the world and talks through the agent, with errors shown in chat
 - [x] World awareness: health, inventory, nearby blocks and mobs, time of day passed to the agent (Phase 1)

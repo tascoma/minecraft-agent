@@ -2,7 +2,7 @@
 
 Everything the minecraft-agent should be able to do as a survival companion, grouped into phases. Each phase builds on the ones before it.
 
-See [architecture.md](architecture.md) for what **reflex**, **tool**, and **skill** mean and where each piece of code lives.
+See [architecture.md](../../architecture.md) for what **reflex**, **tool**, and **skill** mean and where each piece of code lives.
 
 **How to read the tables:**
 
