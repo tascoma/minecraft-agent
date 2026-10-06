@@ -40,7 +40,7 @@ The agent can't make good decisions without knowing what's going on. Before the 
 | Notice and report important events ("I'm hurt", "creeper nearby", "it's getting dark") | Reflex → chat | `health` and `time` events, 1 s creeper scan | ✅ |
 | Auto-reconnect when the world closes and comes back | Bot | `end` event + retry | ✅ |
 
-## Phase 2: Movement and navigation
+## Phase 2: Movement and navigation ✅
 
 The bot does one thing at a time: follow, stand still, or walk somewhere. When it walks somewhere it says in chat whether it arrived or got stuck, without calling the agent. The full task queue waits for Phase 4.
 
@@ -50,8 +50,8 @@ The bot does one thing at a time: follow, stand still, or walk somewhere. When i
 | Go to coordinates | Tool | `go_to`, `GoalNear` / `GoalXZ` | ✅ |
 | Remember named places ("this is home", "the mine") and go back to them | Tool + memory | `save_place`, `go_to_place`, `forget_place`; `backend/data/worlds/<world id>/places.json` | ✅ |
 | Say when it arrives or can't find a way | Bot | `pathfinder.goto` promise | ✅ |
-| Explore in a direction and report what it finds | Tool | `GoalXZ` + Phase 1 scans; needs bot → backend events | 🔲 |
-| Swim, climb ladders, open doors and gates | Reflex | `bot/movements.js` (wooden doors and gates; iron ones need redstone) | ✅ *Known bug: can stall stepping from a dirt path into a doorway (seen at a village house)* |
+| Explore in a direction and report what it finds | Tool | `explore`: walks out in legs, notes biomes, villages, animals, exposed ore and lava, comes back and reports | ✅ |
+| Swim, climb ladders, open doors and gates | Reflex | `bot/movements.js` (wooden doors and gates; iron ones need redstone) | ✅ (stepping into a doorway from a dirt path or farmland needed a physics fix, `patches/prismarine-physics+1.11.1.patch`) |
 | Avoid lava, cliffs and deep water | Reflex | `bot/movements.js`: lava avoided, `maxDropDown` 3, `liquidCost` 5 | ✅ |
 | Teleport to the player ("tp to me") | Tool | `teleport_to_player`, `/tp`; needs Allow Cheats on | ✅ |
 | Build up or bridge across gaps when stuck | Reflex | `Movements.scafoldingBlocks` with dirt or cobblestone; during gathering jobs only, never while following and never in protected areas | ✅ |
@@ -74,7 +74,7 @@ Tested in game with a second player running commands (`/give`, `/damage`, `/summ
 | Sleep when the player sleeps (on LAN, every player must sleep for the night to skip) | Reflex | `entitySleep` event, `bot.sleep` | ✅ |
 | After dying, say where, and go back for its items on request ("get my stuff"); the agent knows how long until they despawn | Reflex + tool | `death` / `respawn` events, `recover_items`, `last_death` in the state | ✅ |
 
-## Phase 4: Gathering resources
+## Phase 4: Gathering resources ✅
 
 Gathering runs as a **job** (`bot/tasks.js`): one at a time, cancelled by "stop" or any new command. The bot reports progress and the result in chat itself, and the current job is in the state snapshot so the agent can say what it's doing.
 
@@ -87,14 +87,14 @@ The bot digs only while gathering, never within 16 blocks (horizontally) of a sa
 | Mine a block type ("get 20 cobblestone", "get some coal"); makes the pickaxe it needs first | Tool | `collect`, block drop data from `minecraft-data` | ✅ |
 | Collect sand, gravel, dirt, clay and other surface blocks | Tool | `collect` | ✅ |
 | Pick up the drops of blocks it breaks (up to 5 seconds per block) | Reflex | walking to item entities | ✅ |
-| Pick up any dropped items nearby | Reflex | Not built: it would also grab the player's drops | 🔲 |
+| Pick up any dropped items nearby | Reflex + tool | After a fight it picks up what the mob dropped (only items that appeared where it died, after it died, never the player's); `pick_up_items` takes everything nearby when asked | ✅ |
 | Give items to the player ("give me your coal") | Tool | `give_items`, `bot.toss` | ✅ |
-| Strip-mine or branch-mine at a chosen Y level | Tool + skill | `bot.dig` + pathfinder | 🔲 |
+| Strip-mine or branch-mine at a chosen Y level | Tool | `mine_for` (Phase 10) digs down to the ore's best height and tunnels out in legs | ✅ |
 | Never mine through the player's builds | Reflex | protected areas around saved places, man-made block list | ✅ |
 
 Tested in game: logs, cobblestone without and with a pickaxe, stopping a job, and giving items. Nothing was dug inside the protected area around home.
 
-## Phase 5: Crafting and smelting
+## Phase 5: Crafting and smelting ✅
 
 One tool, `make_item(item, count)`, runs a job (`bot/crafting.js`) that works out the whole chain as it goes: logs → planks → sticks → crafting table → tool. It gathers missing raw materials and makes any tool it needs to gather them (a wooden pickaxe for stone, a stone pickaxe for iron). Interchangeable ingredients (any planks, any log, any cobblestone-like block, coal or charcoal) are planned together, and the exact recipe is picked when crafting from whatever the bot has. A crafting table or furnace within 16 blocks is used; otherwise the bot makes one, places it, and picks it back up afterwards (a furnace only with a pickaxe).
 
@@ -105,7 +105,7 @@ One tool, `make_item(item, count)`, runs a job (`bot/crafting.js`) that works ou
 | Smelt ores and cook food in a furnace, choosing fuel | Tool | `make_item`, `bot.openFurnace`, smelting table in `crafting.js` | ✅ |
 | Gather missing raw materials during a craft, making the tools needed to mine them | Tool | `gathering.gather` with a tool maker | ✅ |
 | Make tools, weapons and armor as materials allow | Skill | `skills/tool-progression` | ✅ |
-| Replace a tool when it's about to break | Reflex | Partly: when a job needs a tool it doesn't have, it makes one | 🔲 |
+| Replace a tool when it's about to break | Reflex | Gathering makes a new one when the tool it's about to use has 5% (or 3 uses) left and there's no spare | ✅ |
 | Make torches, chests, beds, doors and other basics | Tool | `make_item` | ✅ |
 
 Tested in game (`npm run check:crafting`): a stone pickaxe from an empty inventory, torches, and iron ingots with a furnace it made and placed.
@@ -190,7 +190,7 @@ Several jobs asked for in one reply now queue and run in turn (`bot/tasks.js`), 
 Phases 4 onward need these before they work well:
 
 1. **Task system.** *Done.* Jobs like "get 20 cobblestone" run one at a time, can be cancelled, and report progress and results in chat; several asked for in one reply queue up (`bot/tasks.js`); each one's result goes in the journal.
-2. **Bot → backend events.** *Partly done.* The bot reports jobs finished, deaths and trips (`POST /events`) into the journal, which the agent reads on its next message: no tokens at the time. Still to come: events that make the agent act on its own (attacked, task failed), which would cost tokens and need rate limits.
+2. **Bot → backend events.** *Done.* The bot reports jobs finished, deaths and trips (`POST /events`) into the journal, which the agent reads on its next message, at no cost. With `REACT_TO_EVENTS=true` a failed job or a death also gives the agent a turn to say or do something (or reply SKIP), at most every 2 minutes and within the budget.
 3. **Persistent memory.** *Done.* Named places, chest contents, notes and the journal are saved per world (`backend/data/worlds/<world id>/`), keyed by the world id the bot sends.
 4. **Safety rules.** *Done:* never attack players, villagers, golems or pets, or shoot with one in the line of fire; never dig or build by itself inside protected areas; never break blocks a player placed; only take from chests when asked. Enforced in the bot, not left to the model.
 5. **Tests.** *Done for Phases 1–9:* backend unit tests (`uv run pytest`), bot unit tests (`npm test`), and an in-game check per phase with a second player (`npm run check:survival`, `check:gathering`, `check:crafting`, `check:combat`, `check:farming`, `check:building`, `check:storage`). Each new phase should add to all three.
@@ -201,4 +201,4 @@ Phases 4 onward need these before they work well:
 2. ~~Phase 3 (staying alive)~~ done. ~~Phase 6 reflexes (fighting back)~~ done, using a small attack loop instead of `mineflayer-pvp` (unmaintained since 2021). Guarding, the bow and the shield are done too, so Phase 6 is complete.
 3. ~~Phases 4 and 5 (gathering, crafting)~~ done. The bot can now go from nothing to stone tools, torches and iron ingots by itself.
 4. ~~Phases 7–9 (food and farming, building, base and storage)~~ done.
-5. ~~Phases 10–11 (progression goals, companionship)~~ done. What's left is the open rows above, the cross-cutting events that let the agent act by itself, and the doorway bug (Phase 2).
+5. ~~Phases 10–11 (progression goals, companionship)~~ done, and the last open rows too. Every row in this plan is built.

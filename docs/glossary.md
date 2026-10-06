@@ -4,7 +4,7 @@ Terms used in this project and its docs, grouped by area. Within each group, ter
 
 See [architecture.md](architecture.md) for how the pieces fit together, and [survival-functionality-plan.md](survival-functionality-plan.md) for what's planned.
 
-**Contents:** [Project concepts](#project-concepts) · [AI and the agent](#ai-and-the-agent) · [Bot and Mineflayer](#bot-and-mineflayer) · [Backend and tooling](#backend-and-tooling) · [Minecraft](#minecraft) · [Planned concepts](#planned-concepts)
+**Contents:** [Project concepts](#project-concepts) · [AI and the agent](#ai-and-the-agent) · [Bot and Mineflayer](#bot-and-mineflayer) · [Backend and tooling](#backend-and-tooling) · [Minecraft](#minecraft)
 
 ---
 
@@ -16,13 +16,13 @@ The words this project uses for its own building blocks.
 
 **Action executor**: The part of `bot/index.js` (`runAction`) that takes actions from the backend and performs them with Mineflayer. Logs a warning for any action type it doesn't recognize.
 
-**Action tool**: A tool that changes the world (`follow_player`, `stay_here`, `come_here`, `go_to`, `go_to_place`, `teleport_to_player`, `recover_items`, `collect`, `give_items`, `make_item`, `attack`, `guard_area`, `hunt`, `harvest_crops`, `plant_crops`, `breed_animals`, `go_fishing`, `shear_sheep`, `build_shelter`, `place_block`, `light_up_area`, `pillar_up`, `bridge`, `store_items`, `take_items`, `check_chests`, `sort_chests`, `mine_for`, `build_nether_portal`, `enter_portal`, `throw_ender_eye`, `villager_trades`, `trade_with_villager`, `remember_note`, `forget_note`). It doesn't touch Minecraft itself; it adds a `BotAction` for the bot to carry out. Compare *query tool*.
+**Action tool**: A tool that changes the world (`follow_player`, `stay_here`, `come_here`, `go_to`, `go_to_place`, `teleport_to_player`, `recover_items`, `collect`, `give_items`, `make_item`, `attack`, `guard_area`, `hunt`, `harvest_crops`, `plant_crops`, `breed_animals`, `go_fishing`, `shear_sheep`, `build_shelter`, `place_block`, `light_up_area`, `pillar_up`, `bridge`, `store_items`, `take_items`, `check_chests`, `sort_chests`, `mine_for`, `build_nether_portal`, `enter_portal`, `throw_ender_eye`, `villager_trades`, `trade_with_villager`, `remember_note`, `forget_note`, `explore`, `pick_up_items`). It doesn't touch Minecraft itself; it adds a `BotAction` for the bot to carry out. Compare *query tool*.
 
 **Backend**: The Python process in `backend/`. The bot's "brain": it receives chat, runs the agent, and replies. It's the only part that costs tokens.
 
 **Bot**: The Node process in `bot/`. The bot's "body": a Minecraft player controlled by code, using Mineflayer. It moves, senses and acts, and never costs tokens. Also refers to the in-game player itself, named **Claude**.
 
-**BotAction**: The data shape of an action, defined in `backend/app/schema/chat.py`: a `type` (`follow`, `stay`, `come`, `goto`, `teleport`, `recover`, `collect`, `give`, `make`, `attack`, `guard`, `hunt`, `harvest`, `plant`, `breed`, `fish`, `shear`, `build`, `light`, `place`, `pillar`, `bridge`, `store`, `take`, `inspect`, `sort`, `mine`, `portal`, `enter_portal`, `throw_eye`, `trades` or `trade`), plus `username` for actions aimed at a player, `x`/`y`/`z`/`label` for `goto` and `guard`, `item`/`count` for gathering and making, `target` (a mob, animal or crop) for `attack` and the farming jobs, and `count` for how many.
+**BotAction**: The data shape of an action, defined in `backend/app/schema/chat.py`: a `type` (`follow`, `stay`, `come`, `goto`, `teleport`, `recover`, `collect`, `give`, `make`, `attack`, `guard`, `hunt`, `harvest`, `plant`, `breed`, `fish`, `shear`, `build`, `light`, `place`, `pillar`, `bridge`, `store`, `take`, `inspect`, `sort`, `mine`, `portal`, `enter_portal`, `throw_eye`, `trades`, `trade`, `explore` or `pickup`), plus `username` for actions aimed at a player, `x`/`y`/`z`/`label` for `goto` and `guard`, `item`/`count` for gathering and making, `target` (a mob, animal or crop) for `attack` and the farming jobs, and `count` for how many.
 
 **ChatDeps**: The per-request deps object for the agent, in `backend/app/agents/agent.py`. Holds who is talking, the bot's state snapshot, the saved places, and the list of actions tools have recorded during the run.
 
@@ -43,6 +43,10 @@ The words this project uses for its own building blocks.
 **Drop-off**: When the bot's inventory is full, it takes everything but tools, armor, food and torches to a chest near a saved place within 96 blocks, by itself when idle or in the middle of a gathering job (`bot/storage.js`).
 
 **Blueprint**: A small fixed building in `bot/building.js`: "shelter" (3x3 inside, 2-high walls) or "hut" (5x5 inside, 3-high walls), each with a roof and a door facing the player.
+
+**Event**: A message the bot sends the backend when something happens (jobs finished, deaths, trips). It goes in the journal at no cost. A failed job or a death can also get a reaction from the agent, when `REACT_TO_EVENTS` is on: rate-limited and within the budget.
+
+**Memory**: Information the backend saves across restarts, per world: named places, chest contents, notes and the journal.
 
 **Farming jobs**: Hunting, harvesting, planting, breeding, fishing and shearing (`bot/farming.js`). Each runs as a job, waits out reflexes (a fight, eating) and carries on, and says up front if the inventory is full. Hunting skips babies and leaves the last two adults of a kind so they can still breed.
 
@@ -146,7 +150,7 @@ The words this project uses for its own building blocks.
 
 **Pathfinder (mineflayer-pathfinder)**: The Mineflayer plugin that works out a walkable route and moves the bot along it, including jumping, swimming and climbing.
 
-**patch-package**: Keeps small fixes to installed npm packages as files in `bot/patches/` and reapplies them on every `npm install`. Used for a door bug in `mineflayer-pathfinder`.
+**patch-package**: Keeps small fixes to installed npm packages as files in `bot/patches/` and reapplies them on every `npm install`. Used for door bugs in `mineflayer-pathfinder` and a step-up bug in `prismarine-physics`.
 
 **Player chat**: A chat message typed by a player, which Minecraft sends with the sender's UUID. The bot only answers these, not server or command messages.
 
@@ -222,14 +226,3 @@ The words this project uses for its own building blocks.
 **Tick**: Minecraft's unit of game time, 20 per second (50 ms). Reflexes like following update on every tick. A full day is 24,000 ticks, about 20 minutes.
 
 **Y level**: Height in the world. Ores are found at specific Y levels; diamonds are most common near the bottom of the world.
-
----
-
-## Planned concepts
-
-From [architecture.md](architecture.md), section 6. These aren't built yet, or only partly. (The state snapshot, named places, jobs and protected areas used to be listed here; they're now in *Project concepts*.)
-
-**Event**: A message the bot sends the backend when something happens. Today events only go in the journal (jobs finished, deaths, trips), at no token cost. Planned: events that make the agent decide something without the player chatting (it's under attack, a job failed), which would cost tokens and be rate-limited.
-
-**Memory**: Information the backend saves across restarts, per world: named places, chest contents, notes and the journal.
-

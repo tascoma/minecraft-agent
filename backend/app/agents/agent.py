@@ -66,6 +66,8 @@ agent = Agent(
         'current job, unless they say to finish first. To do several jobs in a row (an iron pickaxe, then a sword, '
         'then armor), call the tools in order in the same reply: they run one after another. '
         'Use your lookup tools to check your inventory and surroundings before answering questions about them; never guess. '
+        'A message starting with [Event] is something that happened, not the player talking: if it is worth it, tell '
+        'them in a sentence or fix it with a tool; if not, reply with exactly SKIP. '
         'Earlier messages show what happened before, not now: your status line is the current truth, and when the player '
         'asks for something again, call the tool again instead of assuming it is already done.'
     ),
@@ -482,6 +484,25 @@ def recall(ctx: RunContext[ChatDeps], about: str) -> str:
     if not found and not notes_found:
         return f'Nothing about "{about}" in your memory.'
     return '\n'.join(found + [f'note: {n}' for n in notes_found])
+
+
+@agent.tool
+def explore(ctx: RunContext[ChatDeps], direction: str | None = None, distance: int = 100) -> str:
+    """Go exploring: walk `distance` blocks (25 to 300) north, south, east or west (leave direction out
+    for the way the player is facing), noting biomes, villages, animals, exposed ore and lava, then
+    come back and report.
+    """
+    ctx.deps.actions.append(BotAction(type='explore', target=direction, count=distance, username=ctx.deps.username))
+    return f'Setting off to explore. The bot will report what it found when it gets back, so do not make anything up.'
+
+
+@agent.tool
+def pick_up_items(ctx: RunContext[ChatDeps], radius: int = 8) -> str:
+    """Pick up the dropped items lying within `radius` blocks (2 to 16). Only when the player asks: it
+    would also take things they meant to leave. You pick up what mobs you kill drop by yourself.
+    """
+    ctx.deps.actions.append(BotAction(type='pickup', count=radius))
+    return 'Picking things up. The bot will say how many.'
 
 
 @agent.tool

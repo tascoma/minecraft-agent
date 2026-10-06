@@ -379,11 +379,12 @@ export function installCrafting(bot, { say, log, gathering, resume }) {
 
   // Gathering asks for this when it needs a tool, e.g. a wooden pickaxe to mine stone. Inside a make
   // job it reuses that job's workstations; on its own (a collect job) it cleans up after itself.
-  gathering.setToolMaker(async (task, tool) => {
+  // `count` is how many to end up with: one more than now when replacing a worn-out tool.
+  gathering.setToolMaker(async (task, tool, count = 1) => {
     const m = task.maker ?? maker(task)
-    m.announce(`I need a ${pretty(tool)} for this, making one.`)
+    m.announce(count > 1 ? `My ${pretty(tool)} is nearly worn out, making a new one.` : `I need a ${pretty(tool)} for this, making one.`)
     try {
-      await m.obtain(tool, 1)
+      await m.obtain(tool, count)
     } finally {
       if (!task.maker) await m.cleanUp()
     }

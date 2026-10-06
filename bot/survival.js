@@ -41,7 +41,7 @@ export function lastDeathInfo() {
 
 export function installSurvival(bot, { say, log, companion, resume }) {
   // Which reflex is driving the bot right now, if any: 'retreat', 'escape', 'sleep', 'recover', or
-  // combat's 'fight' and 'creeper' (see combat.js).
+  // combat's 'fight', 'creeper' and 'loot' (see combat.js).
   let reflex = null
   const lastAnnounced = {}
 
@@ -106,7 +106,7 @@ export function installSurvival(bot, { say, log, companion, resume }) {
   // --- Backing off when hurt ----------------------------------------------
   function checkDanger() {
     // Getting away matters more than finishing a fight.
-    const fighting = reflex === 'fight' || reflex === 'creeper'
+    const fighting = reflex === 'fight' || reflex === 'creeper' || reflex === 'loot'
     if ((reflex && !fighting) || bot.health > lowHealth || bot.health <= 0) return
     const me = bot.entity.position
     const mob = bot.nearestEntity((e) => e.type === 'hostile' && e.position.distanceTo(me) <= dangerRange)

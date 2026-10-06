@@ -275,7 +275,7 @@ Chat goes through `POST /chat` (below). Besides that, the bot fetches saved plac
 //   farming:  hunt, harvest, plant, breed, fish, shear
 //   building: build, light, place, pillar, bridge
 //   storage:  store, take, inspect, sort
-//   progress: mine, portal, enter_portal, throw_eye, trades, trade
+//   progress: mine, portal, enter_portal, throw_eye, trades, trade, explore, pickup
 ```
 
 When something fails, the backend answers with an error status and `{ "error": "Claude is rate limiting me. Try again in a moment." }`. The message is written for the player (`app/core/errors.py`). The bot says it in chat as `Error: ...` and writes the full details to the logs. The bot reports its own failures the same way: backend unreachable or slow, an action that throws, an unexpected crash. Repeats of the same error are muted for 10 seconds.
@@ -329,13 +329,15 @@ flowchart LR
 
 1. **Task queue in the bot.** *Done:* one job at a time with progress, cancel and a result in chat, and jobs from the same reply queue behind it (`bot/tasks.js`). The first action of a reply replaces what's running; the rest wait their turn. Every job waits out reflexes and carries on.
 2. **State snapshot** ✅. Each request includes health, hunger, position, time, inventory and nearby points of interest, so the agent decides with real information instead of guessing.
-3. **Events endpoint.** *Partly done.* `POST /events` records jobs finished, deaths and trips in the journal, which the agent reads on its next message. Still to come: events that make the agent decide something on its own (it's under attack, a job failed), which cost tokens and need rate limits.
+3. **Events endpoint.** *Done.* `POST /events` records jobs finished, deaths and trips in the journal, which the agent reads on its next message. The bot marks failed jobs and deaths as worth a reaction; with `REACT_TO_EVENTS=true` the backend then runs the agent on an `[Event]` message (it may reply SKIP), at most every 2 minutes and within the budget, and the reply and actions go back to the bot like a chat reply.
 4. **Memory.** Named places and chest contents are done (`services/places.py`, `services/chests.py`); the bot reports a chest each time it opens one (`POST /chests`), loads them on join (`GET /chests`) and reports chests it finds gone (`DELETE /chests`). It also remembers where it last died, in memory only. Notes the player asks it to keep, and a journal of what happened, are in `services/journal.py`; the agent sees the notes and the last few events on every message, and searches older ones with `recall`.
-5. **Tool groups.** The agent now has 43 tools, all sent on every request. Grouping them (movement, gathering, crafting, combat, farming, building, storage) into toolsets or capabilities would keep the list readable and could let the agent load groups only when needed, which also saves tokens.
+5. **Tool groups.** The agent now has 45 tools, all sent on every request. Grouping them (movement, gathering, crafting, combat, farming, building, storage) into toolsets or capabilities would keep the list readable and could let the agent load groups only when needed, which also saves tokens.
 
 ---
 
 ## 7. Patched dependencies
+
+Both patches live in `bot/patches/` and are reapplied by `patch-package` on every `npm install`.
 
 `mineflayer-pathfinder` 2.4.5 has door support, but it's off by default and doesn't work properly:
 
@@ -345,9 +347,9 @@ flowchart LR
 
 `bot/patches/mineflayer-pathfinder+2.4.5.patch` fixes all three, and `patch-package` reapplies it on every `npm install`.
 
-**Known issue:** the bot can still stall right in front of an open doorway when it steps up into it from a dirt path (a block 15/16 high). It was seen at a village house door; it isn't fixed yet.
+`prismarine-physics` 1.11.1, which moves the bot, has a step-up bug: it checks the headroom for a step along what's left of the movement after the collision (usually nothing) instead of the movement the bot wanted. A ceiling just past the step is missed, the full step height (0.6) bumps into it, and the step is refused. In practice the bot stood forever in front of a doorway it had to step up into from a dirt path or farmland (15/16 of a block high), with the wall block above the door overhead. `bot/patches/prismarine-physics+1.11.1.patch` checks along the intended movement, as Minecraft does, and `test/physics.test.js` rebuilds that doorway.
 
-If you upgrade `mineflayer-pathfinder`, check whether the patch is still needed. `npm install` fails loudly if it no longer applies.
+If you upgrade `mineflayer-pathfinder` or `prismarine-physics`, check whether its patch is still needed. `npm install` fails loudly if it no longer applies.
 
 ---
 

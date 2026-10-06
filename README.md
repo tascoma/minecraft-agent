@@ -42,7 +42,7 @@ cd bot && npm install       # Node deps
 
 Each world keeps its own saved places, chest contents and chat memory. The bot tells worlds apart by their seed, so reopening a world on a new LAN port is still the same world; the id is logged on join (`world: seed-…`). Two worlds with the same seed share data unless you name them with `MC_WORLD` in `.env`.
 
-Claude costs are capped at `BUDGET_DOLLARS_PER_HOUR` in `.env` (default $0.50). Past it, the bot stops asking Claude for the rest of that hour but still follows, stays, comes when called, fights and eats. Prompt caching keeps a typical message well under a cent.
+Claude costs are capped at `BUDGET_DOLLARS_PER_HOUR` in `.env` (default $0.50). Past it, the bot stops asking Claude for the rest of that hour but still follows, stays, comes when called, fights and eats. Prompt caching keeps a typical message well under a cent. `REACT_TO_EVENTS=true` lets the bot's agent speak up by itself when a job fails or the bot dies (off by default, since each reaction costs a little).
 
 Teleporting (`"tp to me"`) needs commands allowed: choose **Allow Cheats: ON** when you open the world to LAN.
 
@@ -60,10 +60,11 @@ Talk to it in plain chat; these are examples, not fixed commands.
 | Building | "build a shelter", "build a hut out of wood at home", "put a chest here", "light up the area", "bridge 10 blocks east", "pillar up 5" |
 | Storage | "put everything away", "put away the cobblestone", "grab 10 iron", "check the chests", "sort the chests" |
 | Progression | "get me full iron gear", "go mining for diamonds", "build a nether portal", "go through the portal", "hunt 6 blazes", "throw an eye of ender", "what does the villager sell?", "buy bread from the villager" |
+| Exploring | "explore 100 blocks north", "go see what's east", "pick up the items around you" |
 | Memory | "remember that the mine floods", "forget about the mine", "what did you do earlier?", "did the sticks work out?" |
 | Stopping | "stop": any new request also replaces the current job (several things asked for at once run one after another) |
 
-By itself, with no tokens, it follows you, eats, wears the best armor it has, backs off when badly hurt, gets out of lava and water, sleeps when you sleep, fights mobs that attack you or it, backs away from creepers, raises a shield at arrows, and takes a full inventory to a chest at a saved place, and follows you through Nether portals. It also warns you about creepers sneaking up on you, thunderstorms and low health, and points out diamonds in view.
+By itself, with no tokens, it follows you, eats, wears the best armor it has, backs off when badly hurt, gets out of lava and water, sleeps when you sleep, fights mobs that attack you or it, backs away from creepers, raises a shield at arrows, and takes a full inventory to a chest at a saved place, and follows you through Nether portals. It also warns you about creepers sneaking up on you, thunderstorms and low health, and points out diamonds in view. After a fight it picks up what the mob dropped, and it makes a new tool before the old one breaks mid-job.
 
 ## Test
 
@@ -93,6 +94,7 @@ npm run check:building     # chest, shelter with door, torches, pillar, bridge
 npm run check:storage      # look in, find, sort, put away, take out, forget broken chests
 npm run check:progression  # two jobs in turn, Nether portal built and lit, eye of ender, villager trades
 npm run check:companion    # notes, the journal of finished jobs, creeper and diamond tips (needs you near the bot)
+npm run check:extras       # worn pickaxe replaced, drops picked up after a kill and on request, exploring
 ```
 
 ## Roadmap

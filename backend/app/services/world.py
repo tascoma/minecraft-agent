@@ -97,6 +97,9 @@ def describe_status(state: BotState) -> str:
         progress = f' ({task.progress})' if task.progress else ''
         after = f', with {task.queued} more job{"s" if task.queued > 1 else ""} queued after it' if task.queued else ''
         status += f' You are busy {task.description}{progress}{after}.'
+    else:
+        # Said outright: otherwise the model goes by an earlier "started gathering..." in the conversation.
+        status += ' You have no job running.'
     if death := state.last_death:
         left = max(0, (ITEM_DESPAWN_SECONDS - death.seconds_ago) // 60)
         status += (

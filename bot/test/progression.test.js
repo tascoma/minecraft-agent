@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { portalLayout } from '../building.js'
 import { oreLevels, resolveTarget } from '../gathering.js'
 import { affordableTimes, describeTrade } from '../trading.js'
-import { bearing, readEye } from '../travel.js'
+import { bearing, describeFindings, readEye } from '../travel.js'
 import { registry, Vec3 } from './helpers.js'
 
 describe('progression', () => {
@@ -43,5 +43,21 @@ describe('progression', () => {
     assert.deepEqual([...flint.items], ['flint'])
     assert.ok(flint.blockIds.includes(registry.blocksByName.gravel.id))
     assert.ok(resolveTarget(registry, 'wheat_seeds').blockIds.includes(registry.blocksByName.short_grass.id))
+  })
+
+  it('sums up an exploring trip in one chat message', () => {
+    const at = (x, z) => new Vec3(x, 64, z)
+    const report = describeFindings({
+      biomes: ['plains', 'dark_forest'],
+      villagers: { count: 4, at: at(120, -40) },
+      animals: { cow: 3, sheep: 5, pig: 1, chicken: 2, rabbit: 1 },
+      ores: { iron_ore: at(110, -30), coal_ore: at(90, -20), diamond_ore: at(130, -50), gold_ore: at(1, 1), copper_ore: at(2, 2) },
+      lava: at(140, -60),
+    })
+    assert.match(report, /biomes: plains, dark forest; a village with 4 villagers around \(120, -40\)/)
+    assert.match(report, /animals: 5 sheep, 3 cow, 2 chicken, 1 pig;/, 'most first, at most four')
+    assert.ok(!report.includes('copper'), 'at most four ores')
+    assert.ok(report.length < 230, 'fits in a chat message with the trip summary')
+    assert.equal(describeFindings({ biomes: [], villagers: { count: 0 }, animals: {}, ores: {}, lava: null }), 'nothing much')
   })
 })

@@ -1,0 +1,16 @@
+diff --git a/node_modules/prismarine-physics/index.js b/node_modules/prismarine-physics/index.js
+index d95ce7f..e656926 100644
+--- a/node_modules/prismarine-physics/index.js
++++ b/node_modules/prismarine-physics/index.js
+@@ -237,7 +237,10 @@ function Physics (mcData, world) {
+ 
+       const BB1 = oldBB.clone()
+       const BB2 = oldBB.clone()
+-      const BB_XZ = BB1.clone().extend(dx, 0, dz)
++      // The step's headroom is checked along the movement the entity wanted, not what was left of it after
++      // the collision (often nothing), as in Minecraft: otherwise a ceiling just past the step is missed
++      // and the full step height bumps into it (a doorway from a dirt path, say).
++      const BB_XZ = BB1.clone().extend(oldVelX, 0, oldVelZ)
+ 
+       let dy1 = dy
+       let dy2 = dy

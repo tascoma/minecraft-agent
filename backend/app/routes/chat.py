@@ -8,7 +8,7 @@ from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, Text
 from pydantic_ai.usage import RunUsage
 
 from app.agents.agent import ChatDeps, agent
-from app.schema.chat import BotAction, ChatRequest, ChatResponse, ProtectedSpot
+from app.schema.chat import BotAction, BotState, ChatRequest, ChatResponse, EventReport, ProtectedSpot
 from app.services import world
 from app.services.memory import memory
 from app.core.config import get_settings
@@ -25,6 +25,8 @@ FALLBACK_REPLY = 'On it!'
 
 settings = get_settings()
 budget = Budget(settings.budget_dollars_per_hour, settings.model_name)
+# When the agent last reacted to an event, to keep reactions rare.
+last_reaction = float('-inf')
 
 
 def usage_of(messages: list[ModelMessage]) -> RunUsage:
@@ -105,10 +107,23 @@ async def forget_chest(x: int, y: int, z: int, dimension: str, world: str | None
 
 
 @router.post('/events')
-async def record_event(event: Event, world: str | None = None) -> None:
-    """The bot reports something that happened (a job finished, it died, it changed dimension).
-    Just recorded for the agent to read later; no model call."""
-    get_journal(world or None).record(event)
+async def record_event(report: EventReport, world: str | None = None) -> ChatResponse:
+    """The bot reports something that happened (a job finished, it died, it changed dimension). It
+    goes in the journal for the agent to read later, at no cost. When the bot marks it worth reacting
+    to (a job failed, it died) and reactions are on, the agent also gets a turn to say or do
+    something, at most once every few minutes and within the budget."""
+    get_journal(world or None).record(Event(kind=report.kind, text=report.text))
+    if not (report.react and report.player and settings.react_to_events):
+        return ChatResponse(reply='')
+    global last_reaction
+    if time.monotonic() - last_reaction < settings.react_min_gap_s or budget.exhausted():
+        logger.info('not reacting to event (too soon or over budget): %s', report.text)
+        return ChatResponse(reply='')
+    last_reaction = time.monotonic()
+    logger.info('reacting to event for %s: %s', report.player, report.text)
+    response = await run_agent(report.player, f'[Event, not something {report.player} said] {report.text}', report.state)
+    # The agent replies SKIP when there's nothing worth saying.
+    return response if response.reply.strip().upper() != 'SKIP' else response.model_copy(update={'reply': ''})
 
 
 @router.post('/chat')
@@ -117,15 +132,19 @@ async def chat(request: ChatRequest) -> ChatResponse:
     if budget.exhausted():
         logger.warning('over the budget of $%.2f/hour (spent $%.3f); not calling the agent', budget.dollars_per_hour, budget.spent())
         return over_budget(request)
-    if request.state:
-        logger.info(world.describe_status(request.state))
+    return await run_agent(request.username, f'{request.username}: {request.message}', request.state)
+
+
+async def run_agent(username: str, prompt: str, state: BotState | None) -> ChatResponse:
+    """One agent run for `username`, with their recent conversation, logged and counted against the budget."""
+    if state:
+        logger.info(world.describe_status(state))
     started = time.perf_counter()
-    world_id = request.state.world_id if request.state else None
-    deps = ChatDeps(username=request.username, state=request.state)
-    prompt = f'{request.username}: {request.message}'
+    world_id = state.world_id if state else None
+    deps = ChatDeps(username=username, state=state)
     with capture_run_messages() as messages:
         try:
-            result = await agent.run(prompt, deps=deps, message_history=memory.history(request.username, world_id))
+            result = await agent.run(prompt, deps=deps, message_history=memory.history(username, world_id))
         except UnexpectedModelBehavior:
             log_messages(messages, failed=True)
             budget.record(usage_of(messages))
@@ -134,25 +153,25 @@ async def chat(request: ChatRequest) -> ChatResponse:
             if deps.actions:
                 reply = last_text(messages) or FALLBACK_REPLY
                 logger.warning('agent ended without a reply; sending its actions with: %s', reply)
-                memory.remember_fallback(request.username, messages, reply, world_id)
+                memory.remember_fallback(username, messages, reply, world_id)
                 return ChatResponse(
                     reply=reply, actions=unique_actions(deps.actions), protected_places=protected_spots(deps.places)
                 )
-            logger.exception('agent run failed for message from %s', request.username)
+            logger.exception('agent run failed for message from %s', username)
             raise
         except Exception:
             log_messages(messages, failed=True)
             budget.record(usage_of(messages))
-            logger.exception('agent run failed for message from %s', request.username)
+            logger.exception('agent run failed for message from %s', username)
             raise
 
     log_messages(result.new_messages())
-    memory.remember(request.username, result.new_messages(), world_id)
+    memory.remember(username, result.new_messages(), world_id)
     usage = result.usage
     cost = budget.record(usage)
     logger.info(
         'reply to %s (%.1fs, %d in (%d cached, %d cache writes) / %d out tokens, %d requests, $%.4f, $%.3f this hour): %s',
-        request.username,
+        username,
         time.perf_counter() - started,
         usage.input_tokens,
         usage.cache_read_tokens,

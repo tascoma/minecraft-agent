@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     # Most Claude may cost in any hour, in US dollars; past it the bot only handles stay, follow and
     # come by itself until the hour's spend drops. 0 turns the limit off.
     budget_dollars_per_hour: float = 0.5
+    # Let the agent speak up by itself when a job fails or the bot dies (costs tokens), at most once
+    # every react_min_gap_s seconds.
+    react_to_events: bool = False
+    react_min_gap_s: float = 120
 
     host: str = '127.0.0.1'
     port: int = 8000

@@ -84,10 +84,25 @@ export function resolveTarget(registry, name) {
   return { blockIds: blocks.map((b) => b.id), items, label }
 }
 
+/** True for a tool with only a few uses left (5% of its durability, or 3 uses, whichever is more). */
+export function nearlyBroken(item) {
+  if (!item?.maxDurability) return false
+  const left = item.maxDurability - (item.durabilityUsed ?? 0)
+  return left <= Math.max(3, Math.ceil(item.maxDurability * 0.05))
+}
+
 export function installGathering(bot, { say, log, survival, resume }) {
   bot.loadPlugin(toolPlugin) // picks the right tool for each block
 
   const countItems = (names) => bot.inventory.items().filter((i) => names.has(i.name)).reduce((n, i) => n + i.count, 0)
+
+  // The tool the bot would use on `block`, if it's nearly broken and there's no spare: its name.
+  function wornTool(block) {
+    const tool = bot.pathfinder.bestHarvestTool(block)
+    if (!tool || !nearlyBroken(tool)) return null
+    const spares = bot.inventory.items().filter((i) => i.name === tool.name && !nearlyBroken(i))
+    return spares.length ? null : tool.name
+  }
 
   // Stone and ores drop nothing without the right tool. Returns the cheapest tool that would do
   // (e.g. "wooden_pickaxe"), or null if the bot already has one.
@@ -228,6 +243,17 @@ export function installGathering(bot, { say, log, survival, resume }) {
             break
           }
         }
+        // Replace a tool before it breaks halfway through, rather than after (a job that loses its
+        // pickaxe mid-way then digs stone by hand, or stops).
+        const worn = makeTool && wornTool(block)
+        if (worn) {
+          try {
+            await makeTool(task, worn, countItems(new Set([worn])) + 1)
+          } catch (err) {
+            log('WARN', `couldn't replace the worn ${worn}: ${err.message}`)
+          }
+          if (task.cancelled) break
+        }
         try {
           await collectOne(block)
           log('INFO', `collected ${block.name} at ${block.position}`)
@@ -351,6 +377,34 @@ export function installGathering(bot, { say, log, survival, resume }) {
     }, { log, onCancel: stop, onEnd: resume })
   }
 
+  // Pick up every dropped item within `radius` blocks (only when asked: it would also take things the
+  // player meant to leave). Nearest first; one that can't be reached in 10 seconds is skipped.
+  function pickUpAround({ count: radius }) {
+    radius = Math.max(2, Math.min(radius ?? 8, 16))
+    startTask('picking up items', async (task) => {
+      const start = bot.inventory.items().reduce((n, i) => n + i.count, 0)
+      const skipped = new Set()
+      for (let i = 0; i < 40 && !task.cancelled; i++) {
+        if (survival.busy()) { await sleep(500); continue }
+        if (bot.inventory.emptySlotCount() === 0) break
+        const drop = bot.nearestEntity((e) => e.name === 'item' && !skipped.has(e.id) && e.position.distanceTo(bot.entity.position) <= radius)
+        if (!drop) break
+        const p = drop.position
+        try {
+          await goWithin(bot, new goals.GoalNear(p.x, p.y, p.z, 0), 10_000)
+          await sleep(250)
+        } catch {
+          if (task.cancelled) return
+          skipped.add(drop.id)
+        }
+      }
+      if (task.cancelled) return
+      const got = bot.inventory.items().reduce((n, i) => n + i.count, 0) - start
+      if (bot.inventory.emptySlotCount() === 0) say(`Picked up ${got} items, and now my inventory is full.`)
+      else say(got > 0 ? `Picked up ${got} items.` : `There's nothing lying around within ${radius} blocks.`)
+    }, { log, onCancel: () => bot.pathfinder.setGoal(null), onEnd: resume })
+  }
+
   // Walk to the player and toss them `count` of an item (all of it if count is missing).
   function give({ username, item, count }) {
     const name = item.toLowerCase().trim().replaceAll(' ', '_').replace(/^minecraft:/, '')
@@ -399,6 +453,7 @@ export function installGathering(bot, { say, log, survival, resume }) {
     give,
     gather,
     mineFor,
+    pickUpAround,
     pickUpDrops,
     stop,
     setToolMaker: (fn) => { makeTool = fn },

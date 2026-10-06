@@ -87,6 +87,19 @@ class ChatRequest(BaseModel):
     state: BotState | None = None
 
 
+class EventReport(BaseModel):
+    """Something that happened, reported by the bot for the journal."""
+
+    # 'job', 'death', 'travel', ...
+    kind: str
+    text: str
+    # True when it might be worth the agent saying or doing something (a job failed, the bot died).
+    react: bool = False
+    # The player the bot is with, who a reaction would be for; and the bot's state then.
+    player: str | None = None
+    state: BotState | None = None
+
+
 class ProtectedSpot(BaseModel):
     """A saved place the bot keeps a zone around where it never digs or places blocks."""
 
@@ -109,14 +122,15 @@ class BotAction(BaseModel):
     store, take: `item` (None or 'everything' to store all but tools, food and armor), `count`, optional
     `x`/`y`/`z`/`label` for where. inspect, sort: optional `x`/`y`/`z`/`label`.
     mine, trade: `item` and `count`. portal: optional `x`/`y`/`z`/`label`, and `username`. enter_portal, throw_eye,
-    trades: nothing.
+    trades: nothing. explore: `target` (a direction, or None for where the player faces), `count` (distance),
+    `username`. pickup: `count` (radius).
     """
 
     type: Literal['follow', 'stay', 'come', 'goto', 'teleport', 'recover', 'collect', 'give', 'make', 'attack', 'guard',
         'hunt', 'harvest', 'plant', 'breed', 'fish', 'shear',
         'build', 'light', 'place', 'pillar', 'bridge',
         'store', 'take', 'inspect', 'sort',
-        'mine', 'portal', 'enter_portal', 'throw_eye', 'trades', 'trade',
+        'mine', 'portal', 'enter_portal', 'throw_eye', 'trades', 'trade', 'explore', 'pickup',
     ]
     username: str | None = None
     x: int | None = None

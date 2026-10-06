@@ -14,7 +14,7 @@ import { installStorage, setChestMemory } from './storage.js'
 import { installSurvival } from './survival.js'
 import { installTrading } from './trading.js'
 import { installTravel } from './travel.js'
-import { cancelTask, currentTask, queued, setTaskListener } from './tasks.js'
+import { cancelTask, currentTask, queued, setTaskListener, soundsLikeFailure } from './tasks.js'
 import { currentWorldId, setWorldFromLogin } from './world.js'
 
 const { pathfinder, goals } = pathfinderPkg
@@ -148,15 +148,28 @@ function forgetChest({ x, y, z, dimension }) {
 }
 
 // Tell the backend something happened, for the agent's journal ("Got 20 cobblestone.", "died at ...").
-// No model call on the other end, so it costs nothing.
-function reportEvent(kind, text) {
-  fetch(`${backendUrl}/events${worldQuery()}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ kind, text }),
-    signal: AbortSignal.timeout(5000),
-  }).catch((err) => log('WARN', `couldn't report an event to the backend (${describeFetchError(err)})`))
+// Free, unless `react` asks for the agent's take on it (a failed job, a death) and the backend has
+// reactions turned on: then whatever it says or does comes back like a chat reply.
+async function reportEvent(kind, text, { react = false } = {}) {
+  const body = { kind, text }
+  if (react && companion) Object.assign(body, { react: true, player: companion, state: safeSnapshot(companion) })
+  try {
+    const res = await fetch(`${backendUrl}/events${worldQuery()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(react ? backendTimeoutMs : 5000),
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    if (!react) return
+    const { reply, actions = [] } = await res.json()
+    if (reply) say(reply)
+    actions.forEach((action, i) => runAction(action, { first: i === 0 }))
+  } catch (err) {
+    log('WARN', `couldn't report an event to the backend (${describeFetchError(err)})`)
+  }
 }
+
 
 // Each job goes in the journal with the last thing the bot said about it (its result).
 setTaskListener((task, { cancelled }) => {
@@ -165,7 +178,8 @@ setTaskListener((task, { cancelled }) => {
   if (cancelled) {
     reportEvent('job', `stopped ${task.description}${task.progress ? ` at ${task.progress}` : ''}`)
   } else {
-    reportEvent('job', `${task.description}: ${result ?? 'done'}`)
+    const text = `${task.description}: ${result ?? 'done'}`
+    reportEvent('job', text, { react: soundsLikeFailure(result ?? '') })
   }
 })
 
@@ -341,6 +355,8 @@ function dispatch(action) {
   else if (action.type === 'throw_eye') travel.throwEye()
   else if (action.type === 'trades') trading.listTrades()
   else if (action.type === 'trade') trading.trade(action)
+  else if (action.type === 'explore') travel.explore(action)
+  else if (action.type === 'pickup') gathering.pickUpAround(action)
   else {
     log('WARN', `unknown action: ${JSON.stringify(action)}`)
     reportError(`I don't know how to do "${action.type}" yet. Is the bot out of date?`)
@@ -431,7 +447,7 @@ function connect() {
   bot.on('death', () => {
     log('WARN', 'died')
     const { x, y, z } = bot.entity.position.floored()
-    reportEvent('death', `died at (${x}, ${y}, ${z}) in the ${bot.game.dimension.replace(/^the_/, '')}`)
+    reportEvent('death', `died at (${x}, ${y}, ${z}) in the ${bot.game.dimension.replace(/^the_/, '')}`, { react: true })
     // The items are gone and the bot respawns far away; a job can't sensibly carry on.
     cancelTask()
   })

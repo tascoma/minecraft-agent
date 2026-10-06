@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { resolveTarget } from '../gathering.js'
+import { nearlyBroken, resolveTarget } from '../gathering.js'
 import { registry } from './helpers.js'
 
 const names = (target) => target.blockIds.map((id) => registry.blocks[id].name).sort()
@@ -37,5 +37,14 @@ describe('resolveTarget', () => {
     assert.equal(resolveTarget(registry, 'oak_planks'), null)
     assert.equal(resolveTarget(registry, 'chest'), null)
     assert.equal(resolveTarget(registry, 'banana'), null)
+  })
+})
+
+describe('worn tools', () => {
+  it('knows when a tool is about to break', () => {
+    assert.equal(nearlyBroken({ maxDurability: 131, durabilityUsed: 125 }), true, '6 uses left of 131: under 5%')
+    assert.equal(nearlyBroken({ maxDurability: 131, durabilityUsed: 100 }), false)
+    assert.equal(nearlyBroken({ maxDurability: 59, durabilityUsed: 56 }), true, 'wood: 3 uses left')
+    assert.equal(nearlyBroken({ name: 'dirt' }), false, 'not a tool')
   })
 })

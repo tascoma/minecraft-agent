@@ -57,6 +57,12 @@ const guardRange = 12
 const postSlack = 2
 const postWalkMs = 30_000
 const arrows = new Set(['arrow', 'spectral_arrow', 'tipped_arrow'])
+// After a fight, pick up what the mob dropped: items that appeared within this range of where it died
+// after it died (so never the player's own drops), for at most this long.
+const lootRange = 4
+const lootMs = 10_000
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // Damage per second of each weapon, for picking the best one. Swords swing 1.6 times a second,
 // axes 0.8 to 1.0 times.
@@ -137,8 +143,8 @@ export function installCombat(bot, { say, log, survival, companion }) {
       (player && near(e, player.position, defendRange)) || (post && near(e, post, guardRange))))
   }
 
-  // Free to start a reflex fight: no other reflex, no fight, and healthy enough to win it.
-  const canFight = () => !survival.current() && bot.health > lowHealth
+  // Free to start a reflex fight: no other reflex (picking up loot doesn't count), and healthy enough to win it.
+  const canFight = () => (!survival.current() || survival.current() === 'loot') && bot.health > lowHealth
 
   async function equipWeapon() {
     const weapon = bestWeapon(bot.inventory.items())
@@ -271,7 +277,8 @@ export function installCombat(bot, { say, log, survival, companion }) {
     const { target } = fight
     const me = bot.entity.position
     if (!target.isValid || !bot.entities[target.id]) {
-      // Dead or despawned. Carry on with the next attacker, if any.
+      // Dead or despawned. Remember where, to pick up the drops, and carry on with the next attacker.
+      noteKill(target)
       const next = nextThreat()
       const done = fight.ordered && !fight.quiet ? `Got the ${pretty(target.name)}.` : null
       if (next && bot.health > lowHealth) {
@@ -327,7 +334,7 @@ export function installCombat(bot, { say, log, survival, companion }) {
     const creeper = bot.nearestEntity((e) => e.name === 'creeper' && near(e, me, creeperRange))
     if (!creeper) return
     const current = survival.current()
-    if (current && current !== 'fight') return
+    if (current && current !== 'fight' && current !== 'loot') return
     if (current === 'fight') dropFight(false)
     survival.start('creeper')
     bot.pathfinder.setGoal(new goals.GoalInvert(new goals.GoalFollow(creeper, creeperSafe)), true)
@@ -345,11 +352,53 @@ export function installCombat(bot, { say, log, survival, companion }) {
     }
   })
 
+  // --- Loot ---------------------------------------------------------------
+  // Where mobs died in fights: [{ pos, at }]. Hunting jobs (quiet fights) pick up their own drops.
+  const lootSpots = []
+  const spawnedAt = new Map()
+  bot.on('entitySpawn', (e) => { if (e.name === 'item') spawnedAt.set(e.id, Date.now()) })
+  bot.on('entityGone', (e) => spawnedAt.delete(e.id))
+
+  // A mob's drops appear the moment it dies, but it only disappears after its death animation
+  // (about a second), so note the moment of death itself.
+  const diedAt = new Map()
+  bot.on('entityDead', (e) => diedAt.set(e.id, Date.now()))
+
+  function noteKill(target) {
+    const at = diedAt.get(target.id) ?? Date.now() - 1500
+    diedAt.delete(target.id)
+    if (!fight?.quiet) lootSpots.push({ pos: target.position.clone(), at })
+  }
+
+  let looting = false
+  async function loot() {
+    looting = true
+    survival.start('loot')
+    try {
+      const deadline = Date.now() + lootMs
+      while (lootSpots.length && Date.now() < deadline && survival.current() === 'loot') {
+        const { pos, at } = lootSpots[0]
+        const drop = bot.nearestEntity((e) => e.name === 'item' && (spawnedAt.get(e.id) ?? 0) >= at - 250 &&
+          e.position.distanceTo(pos) <= lootRange)
+        if (!drop) { lootSpots.shift(); continue }
+        const p = drop.position
+        await goWithin(bot, new goals.GoalNear(p.x, p.y, p.z, 0), 5000).catch(() => spawnedAt.delete(drop.id))
+        await sleep(200)
+      }
+    } finally {
+      lootSpots.length = 0
+      looting = false
+      survival.finish('loot')
+    }
+  }
+
   const timer = setInterval(() => {
     if (!bot.entity || bot.health <= 0) return
     checkCreeper()
     checkArrows()
     if (fight) fightStep()
+    // Pick up the drops once the fight is over and they've had a moment to land.
+    else if (!looting && lootSpots.length && !survival.current() && Date.now() - lootSpots.at(-1).at > 600) loot()
     else if (canFight()) {
       const threat = nextThreat()
       if (threat) {

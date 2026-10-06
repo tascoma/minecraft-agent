@@ -11,6 +11,10 @@ let queueing = false
 // Told when each job ends: (task, { cancelled }). Set by index.js to report jobs to the journal.
 let onSettled = null
 
+/** True for a job result that sounds like something went wrong, worth the agent's attention. */
+export const soundsLikeFailure = (result) =>
+  /couldn't|can't|only (got|found)|gave up|stopped|blocked|is full|need|no more|there's no|there are no/i.test(result)
+
 export function setTaskListener(fn) {
   onSettled = fn
 }

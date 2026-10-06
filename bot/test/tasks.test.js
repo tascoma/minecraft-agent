@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
-import { cancelTask, currentTask, queued, startTask } from '../tasks.js'
+import { cancelTask, currentTask, queued, soundsLikeFailure, startTask } from '../tasks.js'
 
 const log = () => {}
 const tick = () => new Promise((r) => setTimeout(r, 0))
@@ -87,5 +87,14 @@ describe('queued tasks', () => {
     queued(() => startTask('only', () => new Promise(() => {}), { log }))
     await tick()
     assert.equal(currentTask().description, 'only')
+  })
+})
+
+describe('job results', () => {
+  it('tells a failure from a success', () => {
+    for (const bad of ["I couldn't get any iron: there's no more iron within 48 blocks.", 'I only got 3 logs: ...', "My inventory is full, so I can't pick anything up."]) {
+      assert.equal(soundsLikeFailure(bad), true, bad)
+    }
+    for (const good of ['Got 20 cobblestone.', 'Made 4 sticks.', 'Built the shelter with a door.']) assert.equal(soundsLikeFailure(good), false, good)
   })
 })

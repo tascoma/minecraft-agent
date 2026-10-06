@@ -20,7 +20,7 @@ def test_status_line():
     status = world.describe_status(make_state())
     assert status == (
         'Your status: health 17.5/20 (healthy), food 14/20 (a bit hungry, not healing), at (10, 64, -3) in the Overworld, '
-        'day, about 6 min until night, clear, holding stone_pickaxe, tools: none. You are not following anyone.'
+        'day, about 6 min until night, clear, holding stone_pickaxe, tools: none. You are not following anyone. You have no job running.'
     )
 
 
