@@ -1,33 +1,400 @@
 // Joins a Minecraft Java server and relays chat to the backend agent.
 import mineflayer from 'mineflayer'
+import pathfinderPkg from 'mineflayer-pathfinder'
+import { backendErrorMessage, describeFetchError, fetchChests, fetchPlaces, forgetChest, postChat, postEvent, reportChest } from './core/backend.js'
+import { log } from './core/log.js'
+import { CompanionMovements, setProtectedSpots } from './core/movements.js'
+import { snapshot } from './core/state.js'
+import { cancelTask, currentTask, queued, setTaskListener, soundsLikeFailure } from './core/tasks.js'
+import { setWorldFromLogin } from './core/world.js'
+import { installAlerts } from './reflexes/alerts.js'
+import { installCombat } from './reflexes/combat.js'
+import { installSurvival } from './reflexes/survival.js'
+import { installBuilding } from './jobs/building.js'
+import { installCrafting } from './jobs/crafting.js'
+import { installFarming } from './jobs/farming.js'
+import { installGathering } from './jobs/gathering.js'
+import { installStorage, setChestMemory } from './jobs/storage.js'
+import { installTrading } from './jobs/trading.js'
+import { installTravel } from './jobs/travel.js'
+
+const { pathfinder, goals } = pathfinderPkg
 
 const host = process.env.MC_HOST ?? 'localhost'
 const port = Number(process.env.MC_PORT ?? 25565)
 const username = process.env.MC_USERNAME ?? 'Claude'
-const backendUrl = process.env.BACKEND_URL ?? 'http://127.0.0.1:8000'
+// Names the world instead of using its seed hash (e.g. when two worlds share a seed).
+const worldOverride = process.env.MC_WORLD
+// How close the bot tries to stay to the player it follows, in blocks.
+const followRange = 3
+// How close the bot gets when called over with "come here", in blocks.
+const comeRange = 2
+// How long to wait for the server to move the bot after /tp before assuming it failed.
+const teleportTimeoutMs = 3000
+// Wait before reconnecting after a disconnect, doubling up to the max while the world stays closed.
+const reconnectBaseMs = 5_000
+const reconnectMaxMs = 60_000
+// Don't repeat the same error in chat more often than this, so a failure loop can't spam the player.
+const errorRepeatMs = 10_000
 
-const bot = mineflayer.createBot({ host, port, username, auth: 'offline' })
+// What the bot said during the current job, so the journal can record how it turned out.
+let saidDuringJob = []
 
-bot.once('spawn', () => {
-  console.log(`Joined ${host}:${port} as ${username}`)
-  bot.chat('Hi! I am here.')
-})
-
-bot.on('chat', async (sender, message) => {
-  if (sender === bot.username) return
+function say(message) {
+  if (currentTask()) saidDuringJob.push(message)
   try {
-    const res = await fetch(`${backendUrl}/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: sender, message }),
-    })
-    const { reply } = await res.json()
     // Minecraft chat messages are capped at 256 characters.
-    bot.chat(reply.slice(0, 256))
+    bot.chat(message.slice(0, 256))
+    log('INFO', `said: ${message}`)
   } catch (err) {
-    console.error('Backend request failed:', err)
+    log('ERROR', `could not chat "${message}": ${err.message}`)
+  }
+}
+
+const lastErrorAt = new Map()
+
+// Tell the player something failed. The full error goes to the log.
+function reportError(message) {
+  const now = Date.now()
+  if (now - (lastErrorAt.get(message) ?? 0) < errorRepeatMs) return
+  lastErrorAt.set(message, now)
+  if (bot?.entity) say(`Error: ${message}`)
+}
+
+// Load the saved places so the no-digging zones are right before anyone chats. Chat replies keep
+// them up to date after that.
+async function loadProtectedSpots() {
+  const spots = await fetchPlaces()
+  if (!spots) return
+  setProtectedSpots(spots)
+  log('INFO', `protecting ${spots.length} saved place(s) from digging`)
+}
+
+// The chests the bot remembers in this world, so it knows where things are from the start.
+async function loadChests() {
+  const chests = await fetchChests()
+  if (!chests) return
+  setChestMemory(chests)
+  log('INFO', `remembering ${chests.length} chest(s)`)
+}
+
+// Tell the backend something happened, for the agent's journal ("Got 20 cobblestone.", "died at ...").
+// Free, unless `react` asks for the agent's take on it (a failed job, a death) and the backend has
+// reactions turned on: then whatever it says or does comes back like a chat reply.
+async function reportEvent(kind, text, { react = false } = {}) {
+  const body = { kind, text }
+  if (react && companion) Object.assign(body, { react: true, player: companion, state: safeSnapshot(companion) })
+  const reaction = await postEvent(body)
+  if (!reaction) return
+  if (reaction.reply) say(reaction.reply)
+  ;(reaction.actions ?? []).forEach((action, i) => runAction(action, { first: i === 0 }))
+}
+
+// Each job goes in the journal with the last thing the bot said about it (its result).
+setTaskListener((task, { cancelled }) => {
+  const result = saidDuringJob.at(-1)
+  saidDuringJob = []
+  if (cancelled) {
+    reportEvent('job', `stopped ${task.description}${task.progress ? ` at ${task.progress}` : ''}`)
+  } else {
+    const text = `${task.description}: ${result ?? 'done'}`
+    reportEvent('job', text, { react: soundsLikeFailure(result ?? '') })
   }
 })
 
-bot.on('kicked', (reason) => console.log('Kicked:', reason))
-bot.on('error', (err) => console.error(err))
+// Username of the player being followed, or null when staying put. Kept across reconnects.
+let followTarget = null
+// The player the bot is playing with: the first one it followed. Once set, players who join
+// later don't pull the bot away, even while it's staying put or walking somewhere.
+let companion = null
+let spawned = false
+let reconnectDelay = reconnectBaseMs
+let bot
+// Survival reflexes and gathering jobs for the current connection (see survival.js, gathering.js).
+let survival = null
+let gathering = null
+let crafting = null
+let combat = null
+let farming = null
+let building = null
+let storage = null
+let travel = null
+let trading = null
+
+function updateFollowGoal() {
+  // A reflex (backing off, sleeping, fetching items) or a job (gathering) is driving; it resumes
+  // following when done.
+  if (survival?.busy() || currentTask()) return
+  const entity = followTarget && bot.players[followTarget]?.entity
+  // The player's entity is missing while they're out of range; entitySpawn retries when they come back.
+  if (entity) bot.pathfinder.setGoal(new goals.GoalFollow(entity, followRange), true)
+}
+
+function follow(name) {
+  followTarget = name
+  companion ??= name
+  log('INFO', `following ${name}`)
+  updateFollowGoal()
+}
+
+// Stop following or walking anywhere and stand still.
+function stay() {
+  followTarget = null
+  bot.pathfinder.setGoal(null)
+  log('INFO', 'staying put')
+}
+
+// Walk to a goal once, then stand there. Says in chat how the trip went, so the player
+// doesn't have to ask (and it costs no tokens).
+async function walkTo(goal, { place, arrived }) {
+  followTarget = null
+  log('INFO', `walking to ${place}`)
+  try {
+    await bot.pathfinder.goto(goal)
+    log('INFO', `arrived at ${place}`)
+    say(arrived)
+  } catch (err) {
+    // Another order (stay, follow, a new destination) replaced this trip, so there's nothing to report.
+    if (err.name === 'GoalChanged' || err.name === 'PathStopped') return
+    log('WARN', `could not reach ${place}: ${err.message}`)
+    say(`I can't find a way to ${place}.`)
+  }
+}
+
+function come(name) {
+  const entity = bot.players[name]?.entity
+  if (!entity) {
+    say(`I can't see you, ${name}. Tell me your coordinates and I'll head there.`)
+    return
+  }
+  const { x, y, z } = entity.position.floored()
+  walkTo(new goals.GoalNear(x, y, z, comeRange), { place: name, arrived: "I'm here." })
+}
+
+// Teleport next to a player with /tp. Needs commands allowed: "Allow Cheats" when opening to LAN,
+// or op on a server. Keeps following if it was following; otherwise cancels any trip and waits there.
+function teleport(name) {
+  if (!followTarget) bot.pathfinder.setGoal(null)
+  let serverReply = null
+  const onMessage = (text, position) => {
+    if (position === 'system' || position === 'game_info') serverReply ??= text
+  }
+  const onMoved = () => finish(true)
+  const timer = setTimeout(() => finish(false), teleportTimeoutMs)
+  function finish(moved) {
+    clearTimeout(timer)
+    bot.off('forcedMove', onMoved)
+    bot.off('messagestr', onMessage)
+    if (moved) {
+      log('INFO', `teleported to ${name}`)
+      say("I'm here.")
+      return
+    }
+    log('WARN', `teleport to ${name} failed; server said: ${serverReply ?? 'nothing'}`)
+    say("I couldn't teleport. Commands need to be allowed (Open to LAN, Allow Cheats: ON).")
+  }
+  bot.on('forcedMove', onMoved)
+  bot.on('messagestr', onMessage)
+  log('INFO', `teleporting to ${name}`)
+  bot.chat(`/tp ${name}`)
+}
+
+function goTo({ x, y, z, label }) {
+  const place = label ?? (y == null ? `(${x}, ${z})` : `(${x}, ${y}, ${z})`)
+  // Without a height, any block in that column will do.
+  const goal = y == null ? new goals.GoalXZ(x, z) : new goals.GoalNear(x, y, z, 1)
+  walkTo(goal, { place, arrived: `Made it to ${place}.` })
+}
+
+// Go back to what the player last asked for after a reflex or job is done. If a job is still
+// running (a reflex interrupted it), the job carries on by itself.
+function resume() {
+  if (currentTask()) return
+  if (followTarget) updateFollowGoal()
+  else bot.pathfinder.setGoal(null)
+}
+
+// The first action of a reply replaces whatever reflex or job is running; jobs from the rest of the
+// same reply queue up behind it ("make a pickaxe, then a sword").
+function runAction(action, { first = true } = {}) {
+  try {
+    if (first) {
+      // The player's command wins over whatever reflex or job is running.
+      survival?.cancel()
+      cancelTask()
+      dispatch(action)
+    } else {
+      queued(() => dispatch(action))
+    }
+  } catch (err) {
+    log('ERROR', `action ${JSON.stringify(action)} failed: ${err.stack ?? err}`)
+    reportError(`I couldn't ${action.type}: ${err.message}`)
+  }
+}
+
+function dispatch(action) {
+  if (action.type === 'follow') follow(action.username)
+  else if (action.type === 'stay') stay()
+  else if (action.type === 'come') come(action.username)
+  else if (action.type === 'goto') goTo(action)
+  else if (action.type === 'teleport') teleport(action.username)
+  else if (action.type === 'recover') survival.recoverItems()
+  else if (action.type === 'collect') gathering.collect(action)
+  else if (action.type === 'give') gathering.give(action)
+  else if (action.type === 'make') crafting.make(action)
+  else if (action.type === 'attack') combat.attack(action)
+  else if (action.type === 'guard') combat.guard(action)
+  else if (action.type === 'hunt') farming.hunt(action)
+  else if (action.type === 'harvest') farming.harvest(action)
+  else if (action.type === 'plant') farming.plant(action)
+  else if (action.type === 'breed') farming.breed(action)
+  else if (action.type === 'fish') farming.fish(action)
+  else if (action.type === 'shear') farming.shear(action)
+  else if (action.type === 'build') building.build(action)
+  else if (action.type === 'light') building.lightUp(action)
+  else if (action.type === 'place') building.place(action)
+  else if (action.type === 'pillar') building.pillar(action)
+  else if (action.type === 'bridge') building.bridge(action)
+  else if (action.type === 'store') storage.store(action)
+  else if (action.type === 'take') storage.take(action)
+  else if (action.type === 'inspect') storage.inspect(action)
+  else if (action.type === 'sort') storage.sort(action)
+  else if (action.type === 'mine') gathering.mineFor(action)
+  else if (action.type === 'portal') building.portal(action)
+  else if (action.type === 'enter_portal') travel.enterPortal()
+  else if (action.type === 'throw_eye') travel.throwEye()
+  else if (action.type === 'trades') trading.listTrades()
+  else if (action.type === 'trade') trading.trade(action)
+  else if (action.type === 'explore') travel.explore(action)
+  else if (action.type === 'pickup') gathering.pickUpAround(action)
+  else {
+    log('WARN', `unknown action: ${JSON.stringify(action)}`)
+    reportError(`I don't know how to do "${action.type}" yet. Is the bot out of date?`)
+  }
+}
+
+// Builds the state snapshot, or null if that fails, so a scan bug doesn't stop the bot from chatting.
+function safeSnapshot(speaker) {
+  try {
+    return snapshot(bot, speaker, { following: followTarget })
+  } catch (err) {
+    log('ERROR', `state snapshot failed: ${err.stack ?? err}`)
+    return null
+  }
+}
+
+function connect() {
+  log('INFO', `connecting to ${host}:${port} as ${username}`)
+  bot = mineflayer.createBot({ host, port, username, auth: 'offline' })
+  bot.loadPlugin(pathfinder)
+  bot._client.on('login', (packet) => {
+    log('INFO', `world: ${setWorldFromLogin(packet, { override: worldOverride, host, port })}`)
+  })
+
+  bot.once('spawn', () => {
+    log('INFO', `joined ${host}:${port} as ${username}`)
+    spawned = true
+    reconnectDelay = reconnectBaseMs
+    bot.pathfinder.setMovements(new CompanionMovements(bot))
+    loadProtectedSpots()
+    loadChests()
+    say('Hi! I am here.')
+    // After a reconnect, keep doing what we were doing: follow the same player, or stay put.
+    if (followTarget) follow(followTarget)
+    else if (!companion) {
+      const player = Object.keys(bot.players).find((name) => name !== bot.username)
+      if (player) follow(player)
+    }
+    installAlerts(bot, say, { companion: () => companion })
+    survival = installSurvival(bot, { say, log, companion: () => companion, resume })
+    combat = installCombat(bot, { say, log, survival, companion: () => companion })
+    gathering = installGathering(bot, { say, log, survival, resume })
+    crafting = installCrafting(bot, { say, log, gathering, resume })
+    farming = installFarming(bot, { say, log, survival, combat, gathering, crafting, resume })
+    building = installBuilding(bot, { say, log, survival, crafting, resume })
+    storage = installStorage(bot, { say, log, survival, resume, reportChest, forgetChest })
+    gathering.setDropOff(storage.dropOff)
+    travel = installTravel(bot, { say, log, survival, following: () => followTarget, resume })
+    trading = installTrading(bot, { say, log, resume })
+  })
+
+  bot.on('entitySpawn', (entity) => {
+    if (entity.type === 'player' && entity.username === followTarget) updateFollowGoal()
+  })
+
+  // Players already online at login are handled in spawn; this catches anyone joining later.
+  bot.on('playerJoined', (player) => {
+    if (!spawned) return
+    if (!companion && player.username !== bot.username) follow(player.username)
+  })
+
+  // Only real player chat. Mineflayer's 'chat' event also matches server lines like
+  // "[Steve: Gave 16 [Bread] to Claude]" that every op sees when someone runs a command,
+  // and each of those would cost an agent run.
+  bot._client.on('playerChat', ({ sender: uuid, plainMessage }) => {
+    const sender = Object.values(bot.players).find((p) => p.uuid === uuid)?.username
+    if (!sender || sender === bot.username || !plainMessage) return
+    handleChat(sender, plainMessage)
+  })
+
+  async function handleChat(sender, message) {
+    log('INFO', `heard ${sender}: ${message}`)
+    let res
+    try {
+      res = await postChat({ username: sender, message, state: safeSnapshot(sender) })
+      if (!res.ok) throw new Error(`backend returned HTTP ${res.status}`)
+    } catch (err) {
+      log('ERROR', `backend request failed: ${res ? err.message : describeFetchError(err)}`)
+      reportError(await backendErrorMessage(err, res))
+      return
+    }
+    const { reply, actions = [], protected_places: protectedPlaces } = await res.json()
+    setProtectedSpots(protectedPlaces)
+    say(reply)
+    actions.forEach((action, i) => runAction(action, { first: i === 0 }))
+  }
+
+  bot.on('death', () => {
+    log('WARN', 'died')
+    const { x, y, z } = bot.entity.position.floored()
+    reportEvent('death', `died at (${x}, ${y}, ${z}) in the ${bot.game.dimension.replace(/^the_/, '')}`, { react: true })
+    // The items are gone and the bot respawns far away; a job can't sensibly carry on.
+    cancelTask()
+  })
+  let dimension = null
+  bot.on('spawn', () => {
+    // A spawn in another dimension is a trip through a portal (or a respawn back home).
+    if (dimension && bot.game.dimension !== dimension) reportEvent('travel', `went to the ${bot.game.dimension.replace(/^the_/, '')}`)
+    dimension = bot.game.dimension
+  })
+  bot.on('respawn', () => {
+    log('INFO', 'respawned')
+    updateFollowGoal()
+  })
+  bot.on('kicked', (reason) => log('WARN', `kicked: ${JSON.stringify(reason)}`))
+  bot.on('end', (reason) => {
+    cancelTask()
+    log('INFO', `disconnected: ${reason}; reconnecting in ${reconnectDelay / 1000}s`)
+    spawned = false
+    setTimeout(connect, reconnectDelay)
+    reconnectDelay = Math.min(reconnectDelay * 2, reconnectMaxMs)
+  })
+  bot.on('error', (err) => log('ERROR', err.stack ?? String(err)))
+}
+
+// Last resort: keep the bot alive and tell the player, instead of crashing out of the world.
+// A bug in a tick handler throws 20 times a second, so log each distinct error at most every errorRepeatMs.
+const lastCrashLogAt = new Map()
+function reportCrash(kind, err) {
+  const message = err?.message ?? String(err)
+  const now = Date.now()
+  if (now - (lastCrashLogAt.get(message) ?? 0) >= errorRepeatMs) {
+    lastCrashLogAt.set(message, now)
+    log('ERROR', `${kind}: ${err?.stack ?? err}`)
+  }
+  reportError(`something broke in the bot: ${message}`)
+}
+process.on('uncaughtException', (err) => reportCrash('uncaught', err))
+process.on('unhandledRejection', (err) => reportCrash('unhandled rejection', err))
+
+connect()

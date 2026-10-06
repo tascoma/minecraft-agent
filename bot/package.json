@@ -4,9 +4,28 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node --env-file-if-exists=../.env index.js"
+    "start": "node --env-file-if-exists=../.env index.js",
+    "postinstall": "patch-package",
+    "test": "node --test",
+    "check:survival": "node --env-file-if-exists=../.env scripts/check-survival.js",
+    "check:gathering": "node --env-file-if-exists=../.env scripts/check-gathering.js",
+    "check:crafting": "node --env-file-if-exists=../.env scripts/check-crafting.js",
+    "check:combat": "node --env-file-if-exists=../.env scripts/check-combat.js",
+    "check:farming": "node --env-file-if-exists=../.env scripts/check-farming.js",
+    "check:building": "node --env-file-if-exists=../.env scripts/check-building.js",
+    "check:storage": "node --env-file-if-exists=../.env scripts/check-storage.js",
+    "check:progression": "node --env-file-if-exists=../.env scripts/check-progression.js",
+    "check:companion": "node --env-file-if-exists=../.env scripts/check-companion.js",
+    "check:extras": "node --env-file-if-exists=../.env scripts/check-extras.js"
   },
   "dependencies": {
-    "mineflayer": "^4.39.0"
+    "mineflayer": "^4.39.0",
+    "mineflayer-armor-manager": "^2.0.1",
+    "mineflayer-auto-eat": "^5.0.3",
+    "mineflayer-pathfinder": "^2.4.5",
+    "mineflayer-tool": "^1.2.0"
+  },
+  "devDependencies": {
+    "patch-package": "^8.0.1"
   }
 }

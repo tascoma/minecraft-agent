@@ -1,0 +1,28 @@
+diff --git a/node_modules/mineflayer-pathfinder/index.js b/node_modules/mineflayer-pathfinder/index.js
+index b38bd30..53a1484 100644
+--- a/node_modules/mineflayer-pathfinder/index.js
++++ b/node_modules/mineflayer-pathfinder/index.js
+@@ -176,7 +176,10 @@ function inject (bot) {
+         curPoint.z = Math.floor(curPoint.z) + 0.5
+         continue
+       }
+-      let np = getPositionOnTopOf(b)
++      // Doors and gates are walked through, not stood on: their thin collision shape would otherwise put
++      // this step on top of the panel, a jump the bot can't make. Use the floor under them instead.
++      const passable = b && /_(door|fence_gate)$/.test(b.name)
++      let np = passable ? null : getPositionOnTopOf(b)
+       if (np === null) np = getPositionOnTopOf(bot.blockAt(new Vec3(curPoint.x, curPoint.y - 1, curPoint.z)))
+       if (np) {
+         curPoint.x = np.x
+@@ -524,6 +527,11 @@ function inject (bot) {
+         bot.activateBlock(bot.blockAt(new Vec3(placingBlock.x, placingBlock.y, placingBlock.z))).then(() => {
+           lockUseBlock.release()
+           placingBlock = nextPoint.toPlace.shift()
++          // Opening was the last step: go back to walking instead of "placing" an undefined block.
++          if (!placingBlock) {
++            placing = false
++            lastNodeTime = performance.now()
++          }
+         }, err => {
+           console.error(err)
+           lockUseBlock.release()

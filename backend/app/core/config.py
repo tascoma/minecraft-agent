@@ -15,8 +15,18 @@ class Settings(BaseSettings):
     )
 
     anthropic_api_key: SecretStr
-    model_name: str = 'claude-sonnet-5-5'
+    model_name: str = 'claude-haiku-4-5'
     skills_dir: Path = REPO_ROOT / 'skills'
+    # Things the agent remembers between runs, like named places.
+    data_dir: Path = REPO_ROOT / 'backend' / 'data'
+
+    # Most Claude may cost in any hour, in US dollars; past it the bot only handles stay, follow and
+    # come by itself until the hour's spend drops. 0 turns the limit off.
+    budget_dollars_per_hour: float = 0.5
+    # Let the agent speak up by itself when a job fails or the bot dies (costs tokens), at most once
+    # every react_min_gap_s seconds.
+    react_to_events: bool = False
+    react_min_gap_s: float = 120
 
     host: str = '127.0.0.1'
     port: int = 8000
