@@ -26,7 +26,7 @@ flowchart TB
         skills["Skills<br/>skills/*/SKILL.md"]
     end
 
-    CLAUDE["Claude API<br/>(Haiku 4.5)"]
+    CLAUDE["Claude API<br/>(Haiku 5.5)"]
     logs[("backend/logs/<br/>agent.log, bot.log")]
 
     MC <-->|"game protocol"| conn
