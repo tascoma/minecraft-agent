@@ -32,7 +32,7 @@ def test_a_run_line_has_usage_tools_and_thinking(caplog):
     assert record['kind'] == 'chat' and record['effort'] == 'low' and record['seconds'] == 1.23
     assert (record['input'], record['cached'], record['cache_writes'], record['output'], record['requests']) == (100, 60, 10, 20, 2)
     assert record['tools'] == ['collect']
-    assert (record['thinking_parts'], record['thinking_chars']) == (1, 3)
+    assert record['thinking_parts'] == 1
 
 
 def test_over_budget_chats_are_logged_too(caplog, monkeypatch):
@@ -54,7 +54,7 @@ def test_token_report_sums_run_lines(tmp_path):
     spec.loader.exec_module(module)
     record = {'kind': 'chat', 'user': 'S', 'model': 'm', 'effort': None, 'seconds': 2.0, 'input': 1000, 'cached': 800,
               'cache_writes': 0, 'output': 50, 'requests': 2, 'cost': 0.001, 'tools': ['collect'],
-              'thinking_parts': 0, 'thinking_chars': 0}
+              'thinking_parts': 0}
     log = tmp_path / 'agent.log'
     log.write_text(
         f'2026-10-13 18:45:43,529 INFO app.run: run {json.dumps(record)}\n'

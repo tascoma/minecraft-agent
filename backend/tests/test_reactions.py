@@ -52,3 +52,9 @@ def test_routine_events_never_reach_the_agent(client, monkeypatch):
     with agent.override(model=TestModel(custom_output_text='should not be said')):
         reply = client.post('/events', json={'kind': 'job', 'text': 'making 4 stick: Made 4 sticks.'}).json()
     assert reply['reply'] == ''
+
+
+def test_skip_in_chat_says_nothing(client):
+    with agent.override(model=TestModel(call_tools=[], custom_output_text='SKIP')):
+        reply = client.post('/chat', json={'username': 'Steve', 'message': 'lol'}).json()
+    assert reply['reply'] == '' and reply['actions'] == []

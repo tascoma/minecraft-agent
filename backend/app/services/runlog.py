@@ -23,9 +23,10 @@ def log_run(
 ) -> None:
     """Write one `run {json}` line per agent run, whether it succeeded, fell back or was never started,
     so the logs can be grepped and summed. Thinking is reported separately from the output tokens,
-    which include it."""
+    which include it. The thinking text itself is empty by default (the model omits it), so only the
+    number of thinking parts is counted."""
     tools: list[str] = []
-    thinking_parts = thinking_chars = 0
+    thinking_parts = 0
     for message in messages or []:
         if not isinstance(message, ModelResponse):
             continue
@@ -34,7 +35,6 @@ def log_run(
                 tools.append(part.tool_name)
             elif isinstance(part, ThinkingPart):
                 thinking_parts += 1
-                thinking_chars += len(part.content or '')
     usage = usage or RunUsage()
     record = {
         'kind': kind,
@@ -50,6 +50,5 @@ def log_run(
         'cost': round(cost, 6),
         'tools': tools,
         'thinking_parts': thinking_parts,
-        'thinking_chars': thinking_chars,
     }
     logger.info('run %s', json.dumps(record))

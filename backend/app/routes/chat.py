@@ -68,6 +68,12 @@ def over_budget(request: ChatRequest) -> ChatResponse:
     )
 
 
+def spoken(reply: str) -> str:
+    """The agent replies SKIP when there is nothing worth saying (an event that needs no comment, a
+    "lol"). That means say nothing, in chat as well as for events."""
+    return '' if reply.strip().upper() == 'SKIP' else reply
+
+
 def last_text(messages: list[ModelMessage]) -> str | None:
     """The last thing the model wrote, even if it came alongside a tool call rather than as the final answer."""
     for message in reversed(messages):
@@ -140,8 +146,7 @@ async def record_event(report: EventReport, world: str | None = None) -> ChatRes
     response = await run_agent(
         report.player, f'[Event, not something {report.player} said] {report.text}', report.state, kind='event'
     )
-    # The agent replies SKIP when there's nothing worth saying.
-    return response if response.reply.strip().upper() != 'SKIP' else response.model_copy(update={'reply': ''})
+    return response
 
 
 @router.post('/chat')
@@ -176,7 +181,7 @@ async def run_agent(username: str, prompt: str, state: BotState | None, kind: st
                 log_agent_run('fallback', username, started, usage, cost, messages)
                 memory.remember_fallback(username, messages, reply, world_id)
                 return ChatResponse(
-                    reply=reply, actions=unique_actions(deps.actions), protected_places=protected_spots(deps.places)
+                    reply=spoken(reply), actions=unique_actions(deps.actions), protected_places=protected_spots(deps.places)
                 )
             logger.exception('agent run failed for message from %s', username)
             log_agent_run('error', username, started, usage, cost, messages)
@@ -208,5 +213,5 @@ async def run_agent(username: str, prompt: str, state: BotState | None, kind: st
         result.output,
     )
     return ChatResponse(
-        reply=result.output, actions=unique_actions(deps.actions), protected_places=protected_spots(deps.places)
+        reply=spoken(result.output), actions=unique_actions(deps.actions), protected_places=protected_spots(deps.places)
     )
