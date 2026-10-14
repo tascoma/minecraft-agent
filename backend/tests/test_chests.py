@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
+from pydantic_ai.exceptions import ModelRetry
 
 from app.agents.agent import ChatDeps, check_chests, find_item, sort_chests, store_items, take_items
 from app.main import app
@@ -53,7 +55,8 @@ def test_storage_tools_queue_actions(tmp_path):
     take_items(c, item='iron', count=10)
     check_chests(c, place='home')
     sort_chests(c)
-    assert 'No saved place' in take_items(c, item='iron', place='castle')
+    with pytest.raises(ModelRetry, match='No saved place'):
+        take_items(c, item='iron', place='castle')
     assert c.deps.actions == [
         BotAction(type='store', item='everything'),
         BotAction(type='store', item='cobblestone', count=32, x=1, y=64, z=2, label='home'),

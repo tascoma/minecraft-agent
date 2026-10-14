@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
+from pydantic_ai.exceptions import ModelRetry
 
 from app.agents.agent import (
     ChatDeps,
@@ -82,8 +83,11 @@ def test_go_to_place(store):
 
     go_to_place(c, 'Home')
     assert c.deps.actions == [BotAction(type='goto', x=20, y=65, z=30, label='home')]
-    assert go_to_place(c, 'fortress') == 'fortress is in the Nether, but you are in the Overworld.'
-    assert go_to_place(c, 'castle') == 'No saved place called "castle". Saved places: home, fortress.'
+    # Mistakes it can't carry out go back to the model as a retry, not as a finished action.
+    with pytest.raises(ModelRetry, match='fortress is in the Nether, but you are in the Overworld.'):
+        go_to_place(c, 'fortress')
+    with pytest.raises(ModelRetry, match='No saved place called "castle". Saved places: home, fortress.'):
+        go_to_place(c, 'castle')
     assert len(c.deps.actions) == 1
 
     assert forget_place(c, 'home') == 'Forgot "home".'
@@ -157,7 +161,8 @@ def test_guard_a_saved_place_or_where_the_player_is(store):
     c = ctx(store, player_position={'x': 5, 'y': 70, 'z': 6})
     guard_area(c, place='Home')
     guard_area(c)
-    assert 'No saved place' in guard_area(c, place='castle')
+    with pytest.raises(ModelRetry, match='No saved place'):
+        guard_area(c, place='castle')
     assert c.deps.actions == [
         BotAction(type='guard', x=1, y=64, z=2, label='home'),
         BotAction(type='guard', x=5, y=70, z=6),
@@ -196,7 +201,8 @@ def test_building_tools_queue_actions(store):
     light_up_area(c, radius=12)
     pillar_up(c, height=3)
     bridge(c, length=8, direction='east')
-    assert 'No saved place' in place_block(c, item='chest', place='castle')
+    with pytest.raises(ModelRetry, match='No saved place'):
+        place_block(c, item='chest', place='castle')
     assert c.deps.actions == [
         BotAction(type='build', target='shelter', username='Steve', x=10, y=64, z=-3),
         BotAction(type='build', target='hut', item='wood', username='Steve', x=1, y=64, z=2, label='home'),
