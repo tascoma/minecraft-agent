@@ -89,7 +89,7 @@ def stay_here(ctx: RunContext[ChatDeps]) -> str:
 
 In this project, tools come in two kinds:
 
-- **Action tools** change the world. They don't touch Minecraft directly, because the backend can't. They append a `BotAction` that is sent back to the bot in the `/chat` response, and the bot carries it out. Examples: `follow_player`, `stay_here`.
+- **Action tools** change the world. They don't touch Minecraft directly, because the backend can't. They append a `BotAction` that is sent back to the bot in the `/chat` response, and the bot carries it out. Examples: `follow_player`, `stay_here`. They are registered as *output tools*: calling one ends the run, so the model writes its reply in the same message as the call and no second request is needed. Query tools stay normal tools, because the model needs their results before it answers.
 - **Query tools** read the world: `check_inventory`, `look_around`, `nearby_entities`, `where_are_we`, `find_item`. They read the state snapshot the bot sends with each request (formatted by `app/services/world.py`), or for `find_item` the chest memory, so they never call back into the bot. A status line (world, health, food, position, time, weather, tools, current job, what it's fighting and who it's following) is also added to the agent's instructions on every run.
 
 A tool should be **one clear action** with a description precise enough for Claude to know when to use it. Tool definitions are sent on every request, so each new tool adds a few tokens per message.
@@ -184,11 +184,9 @@ sequenceDiagram
     B->>API: POST /chat {username, message}
     API->>AG: agent.run(message, deps)
     AG->>C: instructions + message + tool list
-    C-->>AG: call stay_here()
-    AG->>AG: stay_here appends BotAction(stay)
-    AG->>C: tool result "Staying here."
-    C-->>AG: "Got it! I'll wait right here."
-    AG-->>API: output + deps.actions
+    C-->>AG: "Got it! I'll wait right here." + call stay_here()
+    AG->>AG: stay_here appends BotAction(stay), run ends
+    AG-->>API: reply text + deps.actions
     API->>API: log tool calls, reply, tokens
     API-->>B: {reply, actions: [{type: "stay"}]}
     B->>B: runAction(stay) → pathfinder.setGoal(null)

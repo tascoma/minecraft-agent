@@ -105,14 +105,32 @@ The biggest savings: a call that never happens costs nothing and answers instant
 - The filter trades convenience for savings: with a friend online, the main player has to say the bot's name ("Claude, get wood") unless the bot just spoke to them.
 - One replay miss is model variance, not this phase: "make an iron pickaxe, then a sword, then armor" chose `mine_for` this time and `make_item` six times in the baseline. Re-run before relying on a single result.
 
-## Phase 2: Fewer model requests per run
+## Phase 2: Fewer model requests per run (first item done)
 
 | Item | Saves | Where | Status |
 |---|---|---|---|
-| **End the run on action tools.** Spike first: make the fire-and-forget action tools (collect, make_item, hunt, build_shelter, go_to, …) end the run, using Pydantic AI output functions, or one `act` output that takes a reply and a list of actions, so the reply is written alongside the call instead of in a second request. Keep several queued jobs in one reply working. Keep lookup tools (`find_item`, `recall`) as normal tools, since their results are needed before answering. This also removes the "empty reply after a tool call" Haiku problem that `FALLBACK_REPLY` works around (check in Phase 0 whether Haiku 5.5 still does this; if not, the spike matters less). Acceptance criteria: text-only replies still work for questions and small talk, and the `SKIP` check (`chat.py:126`) and the string use of `result.output` (`:186`) keep working. If text output isn't allowed, Pydantic AI forces `tool_choice=any`, and a forced choice skips thinking (`profiles/anthropic.py:406`), so measure the behavior change rather than assume it | Requests, Latency | `agents/agent.py`, `routes/chat.py` | 🔲 |
+| **End the run on action tools.** Spike first: make the fire-and-forget action tools (collect, make_item, hunt, build_shelter, go_to, …) end the run, using Pydantic AI output functions, or one `act` output that takes a reply and a list of actions, so the reply is written alongside the call instead of in a second request. Keep several queued jobs in one reply working. Keep lookup tools (`find_item`, `recall`) as normal tools, since their results are needed before answering. This also removes the "empty reply after a tool call" Haiku problem that `FALLBACK_REPLY` works around (check in Phase 0 whether Haiku 5.5 still does this; if not, the spike matters less). Acceptance criteria: text-only replies still work for questions and small talk, and the `SKIP` check (`chat.py:126`) and the string use of `result.output` (`:186`) keep working. If text output isn't allowed, Pydantic AI forces `tool_choice=any`, and a forced choice skips thinking (`profiles/anthropic.py:406`), so measure the behavior change rather than assume it. Built as output tools: see the result below | Requests, Latency | `agents/agent.py`, `routes/chat.py` | ✅ |
 | **Put the inventory summary in the status line.** "What do you have?" then needs no `check_inventory` round trip. Cap it (e.g. top 15 stacks plus "and N more") so a full inventory doesn't bloat every request. Measure whether the extra tokens on every message cost more than the requests saved. Judge this after the Phase 3 status move, since the cost depends on where the status sits | Requests vs Tokens | `services/world.py` | 🔲 |
 | Same check for a one-line "nearby" digest (hostile mobs within 16, the player's distance) against keeping `nearby_entities` as a tool | Requests vs Tokens | `services/world.py` | 🔲 |
 | Count how often each skill is loaded (from Phase 0 logs; grep for the `load_capability` tool name). A skill loaded on most runs that need it could become a line of instructions; one never loaded could go | Requests | `skills/` | 🔲 |
+
+**Result of the first item** (same 32-message replay, run lines in `backend/logs/replay-phase2b-*.log`):
+
+| | Phase 1 | Phase 2 | Phase 2, `EFFORT=low` |
+|---|---|---|---|
+| Requests per action run (avg) | 2.14 | 1.07 | n/a |
+| Latency per action run (avg) | 2.4 s | 1.6 s | n/a |
+| Cost per action run (avg) | $0.00050 | $0.00031 | n/a |
+| Total for the 32 messages | $0.0110 | $0.0087 | $0.0065 |
+| Expected tools called | 30/32 | 30/32 | 30/32 |
+
+- 35 tools that only start something (every one that adds a `BotAction`) are now output tools, collected by the `@action` decorator into `ACTION_TOOLS` and passed to every run as `OUTPUT_TYPES`. The route passes them per run, so `agent.run` without them still works for tests. `end_strategy='exhaustive'` plus `sequential=True` makes several calls in one reply all run, in the order called.
+- A mistake an action can't carry out ("no saved place called castle") is a `ModelRetry`: it goes back to the model like a tool result and the model answers in text.
+- The reply is the text the model wrote next to the call. With the first instruction wording Haiku 5.5 wrote none for 9 of 15 action runs, so the bot said "On it!". Telling it to ALWAYS begin such a message with one sentence fixed that (every reply in the replay was natural). If it writes none anyway, the bot says what the tool started ("Started gathering 64 coal."), taken from the tool's own result, not a bare "On it!".
+- The model no longer sees an action's result before it replies, so "don't claim it's done" now lives in the instructions as well as the tool results. Phase 3's "shorten tool results" item can drop the results' repeated caveat for action tools.
+- The run is still allowed to answer in plain text, so `tool_choice` stays `auto` and thinking still runs (88% of runs used it, as before).
+- The `UnexpectedModelBehavior` fallback in `routes/chat.py` (actions kept when the model answers a tool result with nothing) can no longer trigger for action tools. It is left in as a cheap safety net.
+- The other three items wait for Phase 3: whether adding the inventory or a nearby digest to the status line pays depends on where the status sits.
 
 ## Phase 3: Fewer tokens per request
 

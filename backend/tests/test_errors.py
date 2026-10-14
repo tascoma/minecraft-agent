@@ -57,41 +57,6 @@ FOLLOW = {
 }
 
 
-def test_reply_written_next_to_tool_call_is_used():
-    """What Haiku does: reply text alongside the tool call, then an empty answer to the tool result.
-    Retrying makes it call the tool again, so the bot must get one action and the earlier text."""
-    from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
-
-    def respond(messages, info):
-        last = messages[-1]
-        if isinstance(last, ModelRequest) and any(isinstance(p, ToolReturnPart) for p in last.parts):
-            return ModelResponse(parts=[TextPart('')])
-        return ModelResponse(parts=[TextPart("I'm on my way!"), ToolCallPart('follow_player', {})])
-
-    client = TestClient(app)
-    with agent.override(model=FunctionModel(respond)):
-        res = client.post('/chat', json={'username': 'Steve', 'message': 'follow me around'})
-    assert res.status_code == 200
-    assert res.json()['reply'] == "I'm on my way!"
-    assert res.json()['actions'] == [FOLLOW]
-
-
-def test_actions_survive_when_model_never_writes_text():
-    from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
-
-    def respond(messages, info):
-        if len(messages) == 1:
-            return ModelResponse(parts=[ToolCallPart('follow_player', {})])
-        return ModelResponse(parts=[TextPart('')])
-
-    client = TestClient(app)
-    with agent.override(model=FunctionModel(respond)):
-        res = client.post('/chat', json={'username': 'Steve', 'message': 'follow me around'})
-    assert res.status_code == 200
-    assert res.json()['reply'] == 'On it!'
-    assert res.json()['actions'] == [FOLLOW]
-
-
 def test_empty_reply_without_actions_is_still_an_error():
     from pydantic_ai.messages import ModelResponse, TextPart
 

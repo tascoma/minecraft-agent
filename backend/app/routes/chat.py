@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 
 from fastapi import APIRouter
@@ -7,7 +8,7 @@ from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
 from pydantic_ai.usage import RunUsage
 
-from app.agents.agent import ChatDeps, agent
+from app.agents.agent import OUTPUT_TYPES, ChatDeps, agent
 from app.schema.chat import BotAction, BotState, ChatRequest, ChatResponse, EventReport, ProtectedSpot
 from app.services import world
 from app.services.memory import memory
@@ -83,6 +84,24 @@ def last_text(messages: list[ModelMessage]) -> str | None:
                 if isinstance(part, TextPart) and part.content.strip():
                     return part.content.strip()
     return None
+
+
+def from_tool_result(result: str) -> str:
+    """The part of an action tool's result that is fit to say: "Started gathering 64 coal." from
+    "Started gathering 64 coal. The bot will report how it goes, so do not claim it is done."."""
+    sentences = re.split(r'(?<=[.!?])\s+', result.strip())
+    return ' '.join(s for s in sentences if not s.startswith('The bot') and 'do not' not in s)
+
+
+def final_reply(messages: list[ModelMessage], output: str) -> str:
+    """What the bot says after a successful run. A run that ended on an action tool has the tool's
+    result as its output, which is for the model, not the player: the reply is the text the model
+    wrote in the same message as the call, or if it wrote none, what the tool says it started."""
+    last = next((m for m in reversed(messages) if isinstance(m, ModelResponse)), None)
+    if last is None or not any(isinstance(p, ToolCallPart) for p in last.parts):
+        return output
+    written = ' '.join(p.content.strip() for p in last.parts if isinstance(p, TextPart) and p.content.strip())
+    return written or from_tool_result(output) or FALLBACK_REPLY
 
 
 def unique_actions(actions: list[BotAction]) -> list[BotAction]:
@@ -194,7 +213,9 @@ async def run_agent(username: str, prompt: str, state: BotState | None, kind: st
     deps = ChatDeps(username=username, state=state)
     with capture_run_messages() as messages:
         try:
-            result = await agent.run(prompt, deps=deps, message_history=memory.history(username, world_id))
+            result = await agent.run(
+                prompt, deps=deps, message_history=memory.history(username, world_id), output_type=OUTPUT_TYPES
+            )
         except UnexpectedModelBehavior:
             log_messages(messages, failed=True)
             usage = usage_of(messages)
@@ -222,6 +243,7 @@ async def run_agent(username: str, prompt: str, state: BotState | None, kind: st
 
     log_messages(result.new_messages())
     memory.remember(username, result.new_messages(), world_id)
+    reply = final_reply(result.new_messages(), result.output)
     usage = result.usage
     cost = budget.record(usage)
     log_agent_run(kind, username, started, usage, cost, result.new_messages())
@@ -236,8 +258,8 @@ async def run_agent(username: str, prompt: str, state: BotState | None, kind: st
         usage.requests,
         cost,
         budget.spent(),
-        result.output,
+        reply,
     )
     return ChatResponse(
-        reply=spoken(result.output), actions=unique_actions(deps.actions), protected_places=protected_spots(deps.places)
+        reply=spoken(reply), actions=unique_actions(deps.actions), protected_places=protected_spots(deps.places)
     )
