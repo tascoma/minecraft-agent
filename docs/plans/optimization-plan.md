@@ -165,16 +165,36 @@ The biggest savings: a call that never happens costs nothing and answers instant
 - The one-hour write was not exercised by the replay (the tool block was still cached from an earlier 5-minute run, and a one-hour request can read that). It was verified once the entry had expired: the first message afterwards wrote 8,240 tokens, 7,196 of them (the tool block) at the one-hour rate, and the logged cost matched the 2x price.
 - Cheap guardrail for Phase 5: a test that the instructions don't change when only the status does (added: `test_status_leads_the_message_and_stays_out_of_the_instructions`).
 
-## Phase 4: Bot-side performance
+## Phase 4: Bot-side performance ✅
 
 No tokens, but it's latency on every chat and CPU while playing. Measure before changing anything.
 
 | Item | Saves | Where | Status |
 |---|---|---|---|
-| Time `snapshot()`. `nearbyBlocks` runs one `findBlocks` per interesting block type (every `_log`, `_ore`, `_bed`, …), each over a 32-block radius. Log its duration per chat | n/a | `bot/core/state.js` | 🔲 |
-| If it's slow: one scan over the area, grouping by type, instead of one search per type; or cache the result for a few seconds and reuse it for back-to-back chats | Latency, Bot CPU | `bot/core/state.js` | 🔲 |
-| Send `nearby_blocks` / `nearby_entities` only when they changed since the last chat, or only the top N, if the request size turns out to matter | Latency | `bot/core/state.js`, `schema/chat.py` | 🔲 |
-| Profile the tick handlers of reflexes that run every tick or every second (creeper scan, combat, survival) with `--cpu-prof` during a long session, and throttle anything hot | Bot CPU | `bot/reflexes/` | 🔲 |
+| Time `snapshot()`. `nearbyBlocks` runs one `findBlocks` per interesting block type (every `_log`, `_ore`, `_bed`, …), each over a 32-block radius. Log its duration per chat. Done with `bot/core/perf.js`: `snapshot`, `snapshot.blocks` and `snapshot.entities` are timed, every periodic handler is wrapped in `timed`, and the bot logs one `perf:` line every 5 minutes (calls, average, slowest call, share of a core, event loop lag). Each chat also logs its snapshot's size | n/a | `bot/core/perf.js`, `bot/core/state.js`, `bot/index.js` | ✅ |
+| If it's slow: one scan over the area, grouping by type, instead of one search per type; or cache the result for a few seconds and reuse it for back-to-back chats. It was slow: see the result. Fixed with grouped searches (6 instead of ~130), which needs no cache | Latency, Bot CPU | `bot/core/state.js` | ✅ |
+| Send `nearby_blocks` / `nearby_entities` only when they changed since the last chat, or only the top N, if the request size turns out to matter. **Skipped:** the snapshot is 4.5 KB over localhost, and the backend only turns the blocks and entities into text when the agent calls `look_around` or `nearby_entities` | Latency | `bot/core/state.js`, `schema/chat.py` | ➖ |
+| Profile the tick handlers of reflexes that run every tick or every second (creeper scan, combat, survival) with `--cpu-prof` during a long session, and throttle anything hot. Done with the `perf:` lines instead of `--cpu-prof`, which would mostly show Mineflayer and the pathfinder: nothing of ours is hot (see the result), so nothing is throttled | Bot CPU | `bot/reflexes/` | ✅ |
+
+**Result.** Measured in your world on 2026-10-13 and 2026-10-14, bot following the player, a few chats:
+
+| | Share of one core | Average | Slowest |
+|---|---|---|---|
+| `snapshot.blocks` (per chat) | 0.84% | **1,257 ms** | 1,269 ms |
+| `snapshot.entities` | 0.00% | 0.15 ms | 0.2 ms |
+| `combat.tick` (10 per second) | 0.33% | 0.34 ms | 1.0 ms |
+| `combat.creeper` / `threat` / `arrows` | 0.14% / 0.10% / 0.08% | 0.14 / 0.11 / 0.08 ms | 0.7 ms |
+| `alerts.checkPlayer` (1 per second) | 0.05% | 0.52 ms | 14 ms |
+| `survival.reflexes` (2 per second) | 0.00% | 0.01 ms | 0.1 ms |
+| `travel.entityMoved` (about 300 per second) | 0.01% | 0.00 ms | 0.1 ms |
+| `storage.dropOffCheck` | 0.00% | 0.01 ms | 0.0 ms |
+
+- **The only slow thing was the block scan.** `nearbyBlocks` called `findBlocks` once per interesting block type (about 130 searches), each walking every chunk section in range. Every chat froze the bot's event loop for about 1.25 s (loop lag max 1,283 ms), during which it could not walk, fight or eat, and the agent's reply waited on it.
+- **The fix** searches common blocks (water, sand, gravel, clay) on their own, logs in one search, and everything else (ores, stems, chests, beds, ...) in another: 6 searches, then counts each type from the results. The per-type cap of 100 and the `more` flag are unchanged, and a crowded common block still cannot hide a rare one.
+- **Benchmark** (read-only, as ClaudeTester, 609 loaded chunk columns, 3 rounds): old 754-803 ms, new 162-163 ms, identical output (same types, counts, `more` and distances) every round. About 4.7x faster; the live bot was slower than the benchmark (1,257 ms), so expect roughly 200 ms there. Confirm on the next `perf:` line.
+- **Why not faster:** each search still walks the chunk sections through Mineflayer's `blockAt`. A single pass over the chunk data by state id would be about 10x faster again, but it reaches into prismarine-chunk internals; 160 ms once per chat is not worth that risk.
+- **Not measured:** the handlers during a fight (the windows so far had at most a short zombie fight earlier). `combat.tick` includes the fight step, so it will show up in the next `perf:` lines after a fight. The sleep/wake gap (one window showed a 264 s loop stall and a third of the expected ticks) is the laptop sleeping, not the bot.
+- I did not run `check:combat` to force a fight: it summons husks next to the bot, which follows you.
 
 ## Phase 5: Guardrails
 
