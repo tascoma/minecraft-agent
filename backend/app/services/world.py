@@ -80,11 +80,10 @@ def describe_tools(state: BotState) -> str:
 
 
 def describe_status(state: BotState) -> str:
-    """One line with the essentials, added to the agent's instructions on every run."""
+    """One line with the essentials, put at the start of the player's message on every run."""
     held = state.held_item or 'nothing'
-    world = f'World id: {state.world_id} (a label for this world, not its seed). ' if state.world_id else ''
     status = (
-        f'{world}Your status: health {state.health:g}/20 ({describe_health(state.health)}), '
+        f'Your status: health {state.health:g}/20 ({describe_health(state.health)}), '
         f'food {state.food}/20 ({describe_food(state.food)}), '
         f'at {format_position(state.position)} in {describe_dimension(state.dimension)}, '
         f'{describe_time(state.time_of_day)}, {describe_weather(state)}, holding {held}, '
@@ -107,6 +106,24 @@ def describe_status(state: BotState) -> str:
             f'in {describe_dimension(death.dimension)}; your dropped items vanish in about {left} min.'
         )
     return status
+
+
+# The status line leads each message rather than sitting in the instructions: it changes nearly every
+# message, and anything that changes invalidates the prompt cache for everything after it. In the
+# message, the instructions and the earlier conversation stay the same and get cache reads.
+STATUS_TAG = '[Status] '
+
+
+def with_status(prompt: str, status: str) -> str:
+    return f'{STATUS_TAG}{status}\n{prompt}'
+
+
+def without_status(prompt: str) -> str:
+    """The message as the player wrote it. Kept conversations drop the status line, which is out of date by
+    the next message (the agent gets a fresh one)."""
+    if prompt.startswith(STATUS_TAG) and '\n' in prompt:
+        return prompt.split('\n', 1)[1]
+    return prompt
 
 
 def describe_inventory(state: BotState) -> str:

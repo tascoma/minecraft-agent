@@ -82,7 +82,9 @@ def test_follow_up_sees_previous_exchange():
     with agent.override(model=FunctionModel(respond)):
         client.post('/chat', json={'username': 'Steve', 'message': 'find coal'})
         client.post('/chat', json={'username': 'Steve', 'message': 'get it'})
-    assert seen[1] == ['Steve: find coal', 'Coal ore below us. Want it?', 'Steve: get it']
+    # Earlier messages come back as the player wrote them; only the new one carries a (fresh) status line.
+    assert seen[1][:2] == ['Steve: find coal', 'Coal ore below us. Want it?']
+    assert seen[1][2].startswith('[Status] ') and seen[1][2].endswith('\nSteve: get it')
 
 
 def test_fallback_exchange_keeps_its_tool_call():
@@ -94,7 +96,7 @@ def test_fallback_exchange_keeps_its_tool_call():
         last = messages[-1]
         # The latest thing the player said decides which run this is.
         latest = [p.content for m in messages for p in m.parts if isinstance(p, UserPromptPart)][-1]
-        if latest == 'Steve: what next':
+        if latest.endswith('Steve: what next'):
             return ModelResponse(parts=[TextPart('Sure.')])
         if any(isinstance(p, UserPromptPart) for p in last.parts):
             return ModelResponse(parts=[TextPart("I'm on my way!"), ToolCallPart('follow_player', {})])
@@ -106,7 +108,8 @@ def test_fallback_exchange_keeps_its_tool_call():
         client.post('/chat', json={'username': 'Steve', 'message': 'what next'})
     history = calls[-1]
     assert any(isinstance(p, ToolCallPart) and p.tool_name == 'follow_player' for m in history for p in m.parts)
-    assert texts(history)[-2:] == ["I'm on my way!", 'Steve: what next']
+    assert texts(history)[-2] == "I'm on my way!"
+    assert texts(history)[-1].endswith('\nSteve: what next')
 
 
 def test_history_is_separate_per_world():

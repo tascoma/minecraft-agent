@@ -22,6 +22,19 @@ def test_cached_tokens_cost_less():
     assert round(cached, 4) == 0.0024
 
 
+def test_one_hour_cache_writes_cost_twice_the_input_price():
+    prices = prices_for('claude-haiku-5-5')
+    five_minutes = run_cost(RunUsage(input_tokens=1_000_000, cache_write_tokens=1_000_000), prices)
+    one_hour = run_cost(
+        RunUsage(input_tokens=1_000_000, cache_write_tokens=1_000_000, details={'ephemeral_1h_input_tokens': 1_000_000}), prices
+    )
+    assert round(five_minutes, 4) == 0.125 and round(one_hour, 4) == 0.2
+    mixed = run_cost(
+        RunUsage(input_tokens=1_000_000, cache_write_tokens=1_000_000, details={'ephemeral_1h_input_tokens': 500_000}), prices
+    )
+    assert round(mixed, 4) == 0.1625
+
+
 def test_budget_runs_out_and_comes_back_after_the_hour():
     clock = Clock()
     budget = Budget(0.02, 'claude-haiku-4-5', clock=clock)
