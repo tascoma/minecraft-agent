@@ -7,7 +7,7 @@ from pydantic_ai.usage import RunUsage
 logger = logging.getLogger('app.run')
 
 # What started the run. `scripts/token-report.py` groups by this.
-KINDS = ('chat', 'event', 'fallback', 'error', 'over_budget')
+KINDS = ('chat', 'event', 'fallback', 'error', 'over_budget', 'fast', 'small_talk')
 
 
 def log_run(

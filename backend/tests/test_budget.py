@@ -50,7 +50,7 @@ def test_over_budget_chat_skips_the_agent(monkeypatch):
     spent.record(RunUsage(input_tokens=10_000))
     monkeypatch.setattr(chat_route, 'budget', spent)
     client = TestClient(app)
-    follow = client.post('/chat', json={'username': 'Steve', 'message': 'follow me'}).json()
+    follow = client.post('/chat', json={'username': 'Steve', 'message': 'follow me closely'}).json()
     assert follow['actions'][0]['type'] == 'follow'
     other = client.post('/chat', json={'username': 'Steve', 'message': 'make a pickaxe'}).json()
     assert 'thinking budget' in other['reply'] and other['actions'] == []

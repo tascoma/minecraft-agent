@@ -13,6 +13,7 @@ from app.services import world
 from app.services.memory import memory
 from app.core.config import get_settings
 from app.services.budget import Budget, basic_command
+from app.services.commands import COMMANDS, exact_command, exchange, is_small_talk
 from app.services.chests import Chest, get_chest_store
 from app.services.journal import Event, get_journal
 from app.services.places import get_place_store, protected_spots
@@ -149,9 +150,34 @@ async def record_event(report: EventReport, world: str | None = None) -> ChatRes
     return response
 
 
+def answer_without_agent(request: ChatRequest) -> ChatResponse | None:
+    """An exact command ("stay", "follow me") or small talk ("lol") is handled here, with no agent run,
+    whatever the budget. Anything else, including a longer message that merely contains a command, is
+    None and goes to the agent."""
+    started = time.perf_counter()
+    world_id = request.state.world_id if request.state else None
+    command = exact_command(request.message)
+    if command:
+        spec = COMMANDS[command]
+        messages = exchange(command, f'{request.username}: {request.message}', request.username)
+        memory.remember(request.username, messages, world_id)
+        action = BotAction(type=command) if command == 'stay' else BotAction(type=command, username=request.username)
+        log_run(
+            'fast', username=request.username, model=settings.model_name, seconds=time.perf_counter() - started, messages=messages
+        )
+        return ChatResponse(reply=spec.reply, actions=[action])
+    # "ok" after the bot asked something is an answer, not small talk.
+    if is_small_talk(request.message) and not memory.asked_question(request.username, world_id):
+        log_run('small_talk', username=request.username, model=settings.model_name, seconds=time.perf_counter() - started)
+        return ChatResponse(reply='')
+    return None
+
+
 @router.post('/chat')
 async def chat(request: ChatRequest) -> ChatResponse:
     logger.info('chat from %s: %s', request.username, request.message)
+    if (answer := answer_without_agent(request)) is not None:
+        return answer
     if budget.exhausted():
         logger.warning('over the budget of $%.2f/hour (spent $%.3f); not calling the agent', budget.dollars_per_hour, budget.spent())
         log_run('over_budget', username=request.username, model=settings.model_name, effort=settings.effort)

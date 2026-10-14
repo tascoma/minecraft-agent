@@ -70,7 +70,7 @@ def test_reply_written_next_to_tool_call_is_used():
 
     client = TestClient(app)
     with agent.override(model=FunctionModel(respond)):
-        res = client.post('/chat', json={'username': 'Steve', 'message': 'follow me'})
+        res = client.post('/chat', json={'username': 'Steve', 'message': 'follow me around'})
     assert res.status_code == 200
     assert res.json()['reply'] == "I'm on my way!"
     assert res.json()['actions'] == [FOLLOW]
@@ -86,7 +86,7 @@ def test_actions_survive_when_model_never_writes_text():
 
     client = TestClient(app)
     with agent.override(model=FunctionModel(respond)):
-        res = client.post('/chat', json={'username': 'Steve', 'message': 'follow me'})
+        res = client.post('/chat', json={'username': 'Steve', 'message': 'follow me around'})
     assert res.status_code == 200
     assert res.json()['reply'] == 'On it!'
     assert res.json()['actions'] == [FOLLOW]
