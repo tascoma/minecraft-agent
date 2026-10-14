@@ -35,6 +35,7 @@ def main() -> None:
         os.environ['EFFORT'] = args.effort
 
     from app.routes import chat as chat_route  # imported after the env is set
+    from app.schema.chat import ChatRequest
     from app.services.budget import Budget
     from app.services.memory import memory
     from test_world import make_state
@@ -58,14 +59,15 @@ def main() -> None:
         for item in messages:
             if item.get('fresh', True):
                 memory._conversations.clear()
-            response = await chat_route.run_agent('Replay', f'Replay: {item["say"]}', state)
+            response = await chat_route.chat(ChatRequest(username='Replay', message=item['say'], state=state))
             called = [a.type for a in response.actions]
             records = [json.loads(line.split('run ', 1)[1]) for line in log_file.read_text().splitlines()[-1:]]
             tools = records[0]['tools'] if records else []
+            kind = records[0]['kind'] if records else '?'
             expect = item['expect']
             ok = (not tools) if not expect else any(t in tools for t in expect) or (item.get('optional') and not tools)
             misses += not ok
-            print(f'{"ok  " if ok else "MISS"} [{item["kind"]}] {item["say"]!r} -> tools {tools or "-"} actions {called or "-"}'
+            print(f'{"ok  " if ok else "MISS"} [{item["kind"]}] {item["say"]!r} -> {kind}, tools {tools or "-"} actions {called or "-"}'
                   f'{"" if ok else f"  (expected one of {expect or "no tools"})"}\n       reply: {response.reply!r}')
 
     asyncio.run(run_all())

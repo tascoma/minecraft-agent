@@ -86,17 +86,24 @@ What the baseline says:
 - The one real miss is chatter meant for another player ("hey Alex, did you see that creeper?"): the bot looks around and answers. That is what Phase 1's "ignore chatter" item fixes.
 - Questions the status line or notes already answer ("how are you doing?") are answered without a tool, which is fine; those checks now accept it.
 
-## Phase 1: Don't call Claude when nothing needs thinking
+## Phase 1: Don't call Claude when nothing needs thinking ✅
 
 The biggest savings: a call that never happens costs nothing and answers instantly.
 
 | Item | Saves | Where | Status |
 |---|---|---|---|
-| **Fast path for exact commands.** "stop", "stay", "wait", "follow me", "come here", "come" (the whole message, give or take punctuation and "please") are handled in the route without the agent, every time, not only when over budget. Anything longer goes to the agent as before, so "stop following and get wood" isn't misread. Logged and recorded in memory as an exchange, so a later "ok now get wood" still has context. Record it as a synthetic tool call plus its matching return (e.g. `stay_here`), not as text only, or it undoes the "keep tool calls in history" rule in `memory.py:4-5`. Don't reuse `basic_command`: its substring match (`budget.py:100`) catches "stop following and get wood" | Calls, Latency | `services/budget.py` → its own `services/commands.py`, `routes/chat.py` | 🔲 |
-| **Ignore chatter that isn't meant for the bot.** With two or more players online, only messages that mention the bot's name (or reply within ~30 s of the bot speaking to that player) go to the agent. With one player, everything still goes through | Calls | `bot/index.js` | 🔲 |
-| **Skip trivial small talk.** "lol", "ok", "ty", "nice", emoji-only: answer from a short canned list, or say nothing, with no agent call. Keep the list small and exact-match | Calls | bot or route | 🔲 |
-| **Debounce bursts.** A player who types three lines in two seconds gets one agent run over all three, not three runs | Calls | `bot/index.js` | 🔲 |
-| Tests for each rule, including the things that must still reach the agent | n/a | `backend/tests/test_commands.py`, `bot/test/` | 🔲 |
+| **Fast path for exact commands.** "stop", "stay", "wait", "follow me", "come here", "come" (the whole message, give or take punctuation and "please") are handled in the route without the agent, every time, not only when over budget. Anything longer goes to the agent as before, so "stop following and get wood" isn't misread. Logged and recorded in memory as an exchange, so a later "ok now get wood" still has context. Record it as a synthetic tool call plus its matching return (e.g. `stay_here`), not as text only, or it undoes the "keep tool calls in history" rule in `memory.py:4-5`. Don't reuse `basic_command`: its substring match (`budget.py:100`) catches "stop following and get wood" | Calls, Latency | `services/commands.py`, `routes/chat.py` | ✅ |
+| **Ignore chatter that isn't meant for the bot.** With two or more players online, only messages that mention the bot's name (or reply within ~30 s of the bot speaking to that player) go to the agent. With one player, everything still goes through. Spectators don't count as a player, so the in-game checks' tester doesn't switch the filter on | Calls | `bot/core/chatter.js`, `bot/index.js` | ✅ |
+| **Skip trivial small talk.** "lol", "ok", "ty", "nice", emoji-only: answer from a short canned list, or say nothing, with no agent call. Keep the list small and exact-match. Said to nobody, so the bot stays quiet; and not after the bot asked a question ("ok" is then an answer) | Calls | `services/commands.py`, `routes/chat.py` | ✅ |
+| **Debounce bursts.** A player who types three lines in two seconds gets one agent run over all three, not three runs. Built as a per-player queue, not a delay: the first line goes straight through, and lines that arrive while it is being answered are joined into one follow-up run, so a single message never waits. A burst of three costs two runs, not one | Calls | `bot/core/chatQueue.js`, `bot/index.js` | ✅ |
+| Tests for each rule, including the things that must still reach the agent | n/a | `backend/tests/test_commands.py`, `bot/test/chat.test.js` | ✅ |
+
+**Result** (same 32-message replay, `python3 backend/scripts/token-report.py backend/logs/replay-phase1-*.log`): 7 of 32 messages (22%) no longer run the agent (3 exact commands, 4 small talk). Total cost fell from $0.0126 to $0.0110, and those 7 now answer instantly instead of in about 2 s. The runs that still go to the agent cost the same as before ($0.0004 each).
+
+- The cost saving is small because those messages were already the cheap ones; the gain that matters is latency, and the bot no longer says something for every "lol".
+- Not measured by the replay: the chatter filter and the chat queue, which live in the bot. They are covered by `bot/test/chat.test.js`.
+- The filter trades convenience for savings: with a friend online, the main player has to say the bot's name ("Claude, get wood") unless the bot just spoke to them.
+- One replay miss is model variance, not this phase: "make an iron pickaxe, then a sword, then armor" chose `mine_for` this time and `make_item` six times in the baseline. Re-run before relying on a single result.
 
 ## Phase 2: Fewer model requests per run
 

@@ -68,6 +68,16 @@ class ConversationMemory:
         conversation.exchanges = [*conversation.exchanges, compact(messages)][-MAX_EXCHANGES:]
         conversation.last_active = self._clock()
 
+    def asked_question(self, username: str, world_id: str | None = None) -> bool:
+        """True when the bot's last reply to this player ended in a question, so a short answer like
+        "ok" or "yes" is meant for it."""
+        for message in reversed(self.history(username, world_id)):
+            if isinstance(message, ModelResponse):
+                for part in reversed(message.parts):
+                    if isinstance(part, TextPart) and part.content.strip():
+                        return part.content.strip().endswith('?')
+        return False
+
     def remember_fallback(
         self, username: str, messages: list[ModelMessage], reply: str, world_id: str | None = None
     ) -> None:

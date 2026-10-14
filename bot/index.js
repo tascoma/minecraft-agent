@@ -2,6 +2,8 @@
 import mineflayer from 'mineflayer'
 import pathfinderPkg from 'mineflayer-pathfinder'
 import { backendErrorMessage, describeFetchError, fetchChests, fetchPlaces, forgetChest, postChat, postEvent, reportChest } from './core/backend.js'
+import { createChatQueue } from './core/chatQueue.js'
+import { createChatterFilter } from './core/chatter.js'
 import { log } from './core/log.js'
 import { CompanionMovements, setProtectedSpots } from './core/movements.js'
 import { snapshot } from './core/state.js'
@@ -334,8 +336,15 @@ function connect() {
   bot._client.on('playerChat', ({ sender: uuid, plainMessage }) => {
     const sender = Object.values(bot.players).find((p) => p.uuid === uuid)?.username
     if (!sender || sender === bot.username || !plainMessage) return
-    handleChat(sender, plainMessage)
+    if (!chatter.shouldHandle(sender, plainMessage, Object.values(bot.players))) {
+      log('INFO', `ignored ${sender}: ${plainMessage} (not meant for me)`)
+      return
+    }
+    chatQueue(sender, plainMessage)
   })
+
+  const chatter = createChatterFilter({ botName: () => bot.username })
+  const chatQueue = createChatQueue(handleChat)
 
   async function handleChat(sender, message) {
     log('INFO', `heard ${sender}: ${message}`)
@@ -351,7 +360,10 @@ function connect() {
     const { reply, actions = [], protected_places: protectedPlaces } = await res.json()
     setProtectedSpots(protectedPlaces)
     // An empty reply means the agent had nothing to say.
-    if (reply) say(reply)
+    if (reply) {
+      say(reply)
+      chatter.spoke(sender)
+    }
     actions.forEach((action, i) => runAction(action, { first: i === 0 }))
   }
 

@@ -195,6 +195,8 @@ sequenceDiagram
     B->>P: chat "Got it! I'll wait right here."
 ```
 
+Not every message gets that far. The bot drops chat that isn't meant for it when two or more players are around (it needs the bot's name, or to come soon after the bot spoke to that player), and answers one player's lines one at a time, joining any that pile up while it waits. The backend answers exact one-word commands ("stop", "follow me", "come here") and small talk ("lol", "thanks") by itself, with no agent run (`services/commands.py`). Anything longer goes to the agent as above.
+
 Meanwhile, with no chat at all, the follow reflex keeps running in the bot. That's why following costs nothing.
 
 The bot only reacts to **real player chat** (the `playerChat` packet, with the sender's UUID and the plain message). It ignores server messages, including the `[Steve: Gave 16 [Bread] to Claude]` lines every operator sees when someone runs a command. Mineflayer's own `chat` event matches those too, which would turn every command into a paid agent run.
@@ -242,6 +244,7 @@ backend/app/
   services/chests.py         chest contents, saved per world to backend/data/worlds/<id>/chests.json
   services/journal.py        notes and the journal of what happened, per world (notes.json, journal.json)
   services/budget.py         the spending limit per hour, and the commands handled without Claude past it
+  services/commands.py       exact commands and small talk answered without the agent, at any time
   services/files.py          per-world data file paths and safe JSON writes
   services/memory.py         each player's recent exchanges per world, in memory only
   schema/chat.py             ChatRequest, ChatResponse, BotAction, BotState
