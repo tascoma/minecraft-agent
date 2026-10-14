@@ -1,6 +1,7 @@
 // Builds the snapshot of the bot's situation that is sent to the backend with every chat.
 import { currentFight } from '../reflexes/combat.js'
 import { lastDeathInfo } from '../reflexes/survival.js'
+import { measure } from './perf.js'
 import { currentTask } from './tasks.js'
 import { currentWorldId } from './world.js'
 
@@ -84,8 +85,8 @@ export function snapshot(bot, speaker, { following = null } = {}) {
     thundering: bot.thunderState > 0,
     held_item: bot.heldItem?.name ?? null,
     inventory: bot.inventory.items().map((i) => ({ name: i.name, count: i.count })),
-    nearby_blocks: nearbyBlocks(bot),
-    nearby_entities: nearbyEntities(bot),
+    nearby_blocks: measure('snapshot.blocks', () => nearbyBlocks(bot)),
+    nearby_entities: measure('snapshot.entities', () => nearbyEntities(bot)),
     // Null when the player is too far away for the bot to see them.
     player_position: speakerEntity ? point(speakerEntity.position) : null,
     player_distance: speakerEntity ? round1(speakerEntity.position.distanceTo(me)) : null,
