@@ -23,7 +23,7 @@ def client(tmp_path, monkeypatch):
 
 
 def react(monkeypatch, on=True):
-    monkeypatch.setattr(chat_route, 'settings', SimpleNamespace(react_to_events=on, react_min_gap_s=120))
+    monkeypatch.setattr(chat_route, 'settings', SimpleNamespace(react_to_events=on, react_min_gap_s=120, model_name='test-model', effort=None))
 
 
 def test_events_are_only_recorded_when_reactions_are_off(client, monkeypatch):

@@ -19,7 +19,7 @@ See [architecture.md](../architecture.md) for how the pieces fit together, and t
 
 - Measure first. Every item is checked against Phase 0's numbers before and after. If an item doesn't move the numbers, revert it.
 - Don't trade away behavior. The bot must still call tools instead of only saying it will. That's why tool calls stay in the conversation history (see `backend/app/services/memory.py`). Each phase ends by running the in-game checks again (`bot/scripts/check-*.js`).
-- Cache thresholds are much looser on Haiku 5.5. Haiku 4.5 only cached prefixes of 4096+ tokens; Haiku 5.5's minimum is 512 (confirm against the prompt caching docs). Trimming the tool definitions (~5k tokens) can't take them under the floor in any realistic case, so the old "fold the tools into the instructions breakpoint" fallback is no longer needed. It also means the static instructions could get their own breakpoint if that turns out to help.
+- Cache thresholds are much looser on Haiku 5.5. Haiku 4.5 only cached prefixes of 4096+ tokens; Haiku 5.5's minimum is 512 (confirm against the prompt caching docs). Trimming the tool definitions (~7k tokens) can't take them under the floor in any realistic case, so the old "fold the tools into the instructions breakpoint" fallback is no longer needed. It also means the static instructions could get their own breakpoint if that turns out to help.
 - Haiku 5.5 is priced at $0.10 / $0.50 per million tokens (up to 100k-token prompts), a tenth of Haiku 4.5. Savings in dollars are ten times smaller than this plan first assumed, so Phase 0 matters more: some items may no longer be worth their complexity. Latency and behavior are now the stronger reasons for most items.
 - Haiku 5.5 runs adaptive thinking by default, at `medium` effort. Thinking tokens bill as output and add latency. Include this in the Phase 0 numbers, and try a lower effort for chat. Set it with `AnthropicModelSettings(anthropic_effort='low')`, not Pydantic AI's unified `thinking=` setting: the installed pydantic-ai (2.54.0) doesn't list `claude-haiku-5-5` in its model profiles, so `thinking='low'` would send old-style budget thinking and `thinking=False` would send nothing. `anthropic_effort` passes straight through to `output_config.effort`. Pin pydantic-ai in `backend/pyproject.toml` for the Phase 0 baseline (it currently allows `>=2.54.0`), so an upgrade can't quietly change how thinking is handled.
 
@@ -31,8 +31,8 @@ Each `/chat` runs the Pydantic AI agent (`backend/app/agents/agent.py`) with:
 
 | Part | Size (to be measured) | Changes | Cached |
 |---|---|---|---|
-| Tool definitions (46 tools: 45 `@agent.tool`s plus the Skills capability's `load_capability`) | ~5k tokens | Never | Yes, own breakpoint, 5 min TTL (re-measure on Haiku 5.5) |
-| Static instructions + skill list | ~1k | Never | Shares a breakpoint with what follows |
+| Tool definitions (46 tools: 45 `@agent.tool`s plus the Skills capability's `load_capability`) | ~7.3k tokens (measured) | Never | Yes, own breakpoint, 5 min TTL |
+| Static instructions + skill list | ~0.85k (measured) | Never | Shares a breakpoint with what follows |
 | Notes, chest count, recent events, saved places | Varies | When a job ends or a note or place changes | Same |
 | Status line | ~150 | Nearly every message | Same |
 | History: last 5 exchanges, tool results cut to 300 chars | ~0.5–3k | Every message | Within a run only |
@@ -43,24 +43,48 @@ What follows from this:
 1. **Every player chat is an agent run**, including "lol", "brb" and chat between two players. The only zero-token path is `basic_command`, and it's used only after the budget runs out (`backend/app/services/budget.py`).
 2. **An action command takes at least two model requests.** The model calls `collect(...)`, gets "Started gathering…" back, and then writes its reply. Lookup questions work the same way: `check_inventory` returns text built from state the backend already has.
 3. **The status line sits in the system instructions.** Because it changes on nearly every message, it invalidates the cache for everything after it, including the history. Across messages, only the tool definitions get cache reads.
-4. **When chat is quieter than every 5 minutes, the tool cache expires,** so the next message pays 1.25x to write ~5k tokens again.
+4. **When chat is quieter than every 5 minutes, the tool cache expires,** so the next message pays 1.25x to write ~7k tokens again.
 
 ---
 
-## Phase 0: Measure 🔲
+## Phase 0: Measure ✅
 
-Nothing else gets judged without this.
+Nothing else gets judged without this. Baseline numbers are at the end of this phase.
 
 | Item | Saves | Where | Status |
 |---|---|---|---|
 | Log per-run usage already exists (in / cached / cache writes / out / requests / $) | n/a | `routes/chat.py` | ✅ |
-| Also log the run's tool names and its kind as one structured line (JSON), so it can be grepped and summed. Write the line on every path, not only success: today the empty-reply fallback (`routes/chat.py:148-161`) and the over-budget path (`:132-134`) log no usage or latency. Kinds: `chat`, `event`, `fallback`, `over_budget` | n/a | `routes/chat.py` | 🔲 |
-| Log thinking separately: `RunUsage.output_tokens` lumps thinking and reply text together, so also log the count and length of each run's `ThinkingPart`s. Run the replay set at both `medium` and `low` effort | n/a | `routes/chat.py` | 🔲 |
-| Pin pydantic-ai and set effort through `AnthropicModelSettings(anthropic_effort=…)` (see ground rules) | n/a | `backend/pyproject.toml`, `agents/agent.py` | 🔲 |
-| Seed the baseline from `backend/logs/agent.log`: runs after the Haiku 5.5 switch (from 18:40 on 2026-10-13) already show ~8k input tokens per request (above the ~6.5k estimate), 37–158 output tokens and 1.2–1.6k cache writes per run. Confirm they really ran on Haiku 5.5 before relying on them | n/a | `scripts/token-report.py` | 🔲 |
-| `scripts/token-report.py`: reads the logs and prints, by message kind, the average and p90 input, cached, written and output tokens, requests, $ and latency, plus the cache hit rate | n/a | new | 🔲 |
-| Measure each prompt part on its own with Anthropic's `count_tokens` endpoint (tools, static instructions, skill list, a typical status line, a 5-exchange history), and fill in the table above | n/a | new test or script | 🔲 |
-| A fixed replay set of ~30 real chat messages (commands, questions, small talk, multi-job requests). Run it against the backend with a stub state and record the numbers. That's the baseline for every later phase | n/a | `backend/tests/` (marked, not run by default) | 🔲 |
+| Also log the run's tool names and its kind as one structured line (JSON), so it can be grepped and summed. Write the line on every path, not only success: today the empty-reply fallback (`routes/chat.py:148-161`) and the over-budget path (`:132-134`) log no usage or latency. Kinds: `chat`, `event`, `fallback`, `error`, `over_budget` | n/a | `routes/chat.py`, `services/runlog.py` | ✅ |
+| Log thinking separately: `RunUsage.output_tokens` lumps thinking and reply text together, so also log the count and length of each run's `ThinkingPart`s. Run the replay set at both `medium` and `low` effort | n/a | `services/runlog.py` | ✅ |
+| Pin pydantic-ai and set effort through `AnthropicModelSettings(anthropic_effort=…)` (see ground rules) | n/a | `pyproject.toml`, `core/config.py` (`EFFORT`), `agents/agent.py` | ✅ |
+| `scripts/token-report.py`: reads the logs and prints, by message kind, the average and p90 input, cached, written and output tokens, requests, $ and latency, plus the cache hit rate and the share of runs that used thinking | n/a | `scripts/token-report.py` | ✅ |
+| Measure each prompt part on its own with Anthropic's `count_tokens` endpoint (tools, instructions, a typical status line), and fill in the table above. History isn't counted separately; read it off the run logs | n/a | `scripts/count-prompt-tokens.py` | ✅ |
+| A fixed replay set of 32 chat messages (commands, questions, small talk, multi-job requests, follow-ups). `scripts/replay.py` runs it against the real agent with a stub state and a temporary data dir, writes the run lines to `backend/logs/replay-<label>-<time>.log`, and prints the tools called against the ones expected. It's a script, not a pytest test: it spends real money, and the test suite's fake API key would get in the way. That's the baseline for every later phase | n/a | `scripts/replay.py`, `scripts/replay-messages.json` | ✅ |
+
+**Baseline** (2026-10-13, claude-haiku-5-5, stub state, 32 messages; `python3 scripts/token-report.py backend/logs/replay-*.log`):
+
+| | Default effort (medium) | `EFFORT=low` |
+|---|---|---|
+| Input tokens per run (avg / p90) | 15.1k / 16.7k | 14.8k / 16.7k |
+| Output tokens per run (avg / p90) | 158 / 245 | 143 / 221 |
+| Cost per run (avg) | $0.0004 | $0.0002 |
+| Latency (avg / p90) | 2.1 s / 2.8 s | 1.9 s / 2.6 s |
+| Requests per run | 2 (p90 2) | 2 (p90 2) |
+| Runs that used thinking | 69% | 53% |
+| Cache hit rate | 91% | 99% |
+| Expected tools called | 27/32 before loosening the checks, 31/32 after | 31/32 |
+
+The cache hit rate here is inflated: the replay sends 32 messages back to back with the same stub state, and the low run started within 5 minutes of the first, so it read the first run's cache. Take the real rate from `agent.log` after real play.
+
+Prompt parts (`scripts/count-prompt-tokens.py`): tool definitions 7.3k tokens (46 tools, more than the ~5k estimated), instructions 0.84k with no bot state, 0.92k with a typical state (0.085k of that is state-dependent).
+
+What the baseline says:
+
+- A run is about $0.0004 at default effort. At 100 chats an hour that is 4 cents, well under the 50-cent hourly budget, so cost is not the main reason to optimize; latency and behavior are.
+- Every run, small talk included, makes two model requests and sends ~15k input tokens. The tool definitions are about half of that. Phase 1 (skip the agent) and Phase 2 (one request) therefore matter more than trimming tokens.
+- `EFFORT=low` cut cost per run in half and was a little quicker, with the same tool choices. Worth making the default once the in-game checks pass.
+- The one real miss is chatter meant for another player ("hey Alex, did you see that creeper?"): the bot looks around and answers. That is what Phase 1's "ignore chatter" item fixes.
+- Questions the status line or notes already answer ("how are you doing?") are answered without a tool, which is fine; those checks now accept it.
 
 ## Phase 1: Don't call Claude when nothing needs thinking
 
