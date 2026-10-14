@@ -5,6 +5,7 @@ import { backendErrorMessage, describeFetchError, fetchChests, fetchPlaces, forg
 import { createChatQueue } from './core/chatQueue.js'
 import { createChatterFilter } from './core/chatter.js'
 import { log } from './core/log.js'
+import { measure, startPerfLog } from './core/perf.js'
 import { CompanionMovements, setProtectedSpots } from './core/movements.js'
 import { snapshot } from './core/state.js'
 import { cancelTask, currentTask, queued, setTaskListener, soundsLikeFailure } from './core/tasks.js'
@@ -278,7 +279,9 @@ function dispatch(action) {
 // Builds the state snapshot, or null if that fails, so a scan bug doesn't stop the bot from chatting.
 function safeSnapshot(speaker) {
   try {
-    return snapshot(bot, speaker, { following: followTarget })
+    const state = measure('snapshot', () => snapshot(bot, speaker, { following: followTarget }))
+    log('INFO', `snapshot for ${speaker}: ${JSON.stringify(state).length} bytes, ${state.nearby_blocks.length} block types, ${state.nearby_entities.length} entities`)
+    return state
   } catch (err) {
     log('ERROR', `state snapshot failed: ${err.stack ?? err}`)
     return null
@@ -410,4 +413,6 @@ function reportCrash(kind, err) {
 process.on('uncaughtException', (err) => reportCrash('uncaught', err))
 process.on('unhandledRejection', (err) => reportCrash('unhandled rejection', err))
 
+// One `perf:` line every few minutes: what the bot's periodic work costs (see core/perf.js).
+startPerfLog(log)
 connect()

@@ -4,6 +4,7 @@
 import { createRequire } from 'node:module'
 import pathfinderPkg from 'mineflayer-pathfinder'
 import { protectedPlaces } from '../core/movements.js'
+import { timed } from '../core/perf.js'
 import { currentTask, startTask } from '../core/tasks.js'
 import { goWithin } from '../core/walk.js'
 
@@ -418,7 +419,7 @@ export function installStorage(bot, { say, log, survival, resume, reportChest, f
 
   // When idle with a full inventory, take things to the base by itself.
   let lastDropOff = 0
-  const dropOffTimer = setInterval(() => {
+  const dropOffTimer = setInterval(timed('storage.dropOffCheck', () => {
     if (!bot.entity || currentTask() || survival.busy() || bot.inventory.emptySlotCount() > 0) return
     if (Date.now() - lastDropOff < dropOffRetryMs) return
     lastDropOff = Date.now()
@@ -427,7 +428,7 @@ export function installStorage(bot, { say, log, survival, resume, reportChest, f
       const freed = await dropOff(task)
       if (!task.cancelled && !freed) say("I couldn't drop anything off: the chests at the base are full.")
     }, { log, onCancel: () => bot.pathfinder.setGoal(null), onEnd: resume })
-  }, 5000)
+  }), 5000)
   bot.once('end', () => clearInterval(dropOffTimer))
 
   return { store, take, inspect, sort, dropOff }

@@ -1,6 +1,7 @@
 // Reflexes that warn the player in chat about things that need attention, and offer the odd tip.
 // No backend call, no tokens. Creepers near the bot itself are handled (and announced) by combat.js;
 // here it's creepers sneaking up on the player.
+import { timed } from '../core/perf.js'
 
 // Minimum time between two alerts of the same kind, in milliseconds.
 const cooldownMs = 30_000
@@ -96,8 +97,8 @@ export function installAlerts(bot, say, { companion }) {
     }
   }
 
-  const timer = setInterval(() => {
+  const timer = setInterval(timed('alerts.checkPlayer', () => {
     if (bot.entity) checkPlayer()
-  }, 1000)
+  }), 1000)
   bot.once('end', () => clearInterval(timer))
 }

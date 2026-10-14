@@ -209,6 +209,7 @@ bot/
   core/                      shared plumbing
     backend.js               every HTTP call to the backend (chat, places, chests, events)
     log.js                   backend/logs/bot.log and the console
+    perf.js                  times the periodic handlers; one `perf:` line in bot.log every 5 minutes
     world.js                 which world this is (seed hash, MC_WORLD, or the server address)
     state.js                 state snapshot sent with each chat
     movements.js             pathfinder rules: no digging, safe drops, doors and gates, protected areas

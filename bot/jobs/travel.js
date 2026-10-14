@@ -3,6 +3,7 @@
 import pathfinderPkg from 'mineflayer-pathfinder'
 import { exposed } from '../reflexes/alerts.js'
 import { directions, facingFromYaw } from './building.js'
+import { timed } from '../core/perf.js'
 import { startTask } from '../core/tasks.js'
 import { goWithin } from '../core/walk.js'
 
@@ -121,9 +122,9 @@ export function installTravel(bot, { say, log, survival, following, resume }) {
   // Follow the player through a portal: when the player being followed vanishes right next to one,
   // go through after them. On the other side the follow picks them up again.
   const lastSeen = new Map()
-  bot.on('entityMoved', (e) => {
+  bot.on('entityMoved', timed('travel.entityMoved', (e) => {
     if (e.type === 'player' && e.username === following()) lastSeen.set(e.username, e.position.clone())
-  })
+  }))
   bot.on('entityGone', (e) => {
     const name = following()
     if (e.type !== 'player' || e.username !== name) return

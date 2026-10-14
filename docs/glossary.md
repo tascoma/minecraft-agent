@@ -174,7 +174,7 @@ The words this project uses for its own building blocks.
 
 **Logs**: Files in `backend/logs/`:
 - `agent.log`: each agent run's message, tool calls, reply, time and tokens. Starts a new file at 5 MB and keeps 5 old ones.
-- `bot.log`: bot actions, such as joining, chat heard and said, following or staying, reflexes, jobs (including each block dug), deaths and errors.
+- `bot.log`: bot actions, such as joining, chat heard and said, following or staying, reflexes, jobs (including each block dug), deaths and errors. Every 5 minutes a `perf:` line says how much of a CPU core each periodic handler used and how late the event loop ran; each chat logs how big its state snapshot was.
 - `bot-console.log`: the bot's raw console output, including library warnings.
 
 **In-game check**: A script in `bot/scripts/` that joins as a second player, ClaudeTester, sets up a situation with commands, and checks what the bot does. Needs cheats on. Checks tag the mobs they summon and only kill those, take back the tools they give, and (farming, building, storage) record and restore every block of the patch they test on. Shared helpers are in `bot/scripts/tester.js`.

@@ -5,6 +5,7 @@
 // The rules about what may be hit live here, in the bot, not in the agent's instructions.
 import pathfinderPkg from 'mineflayer-pathfinder'
 import { aimPoint, someoneInTheWay } from './archery.js'
+import { measure, timed } from '../core/perf.js'
 import { startTask } from '../core/tasks.js'
 import { goWithin } from '../core/walk.js'
 
@@ -392,20 +393,20 @@ export function installCombat(bot, { say, log, survival, companion }) {
     }
   }
 
-  const timer = setInterval(() => {
+  const timer = setInterval(timed('combat.tick', () => {
     if (!bot.entity || bot.health <= 0) return
-    checkCreeper()
-    checkArrows()
+    measure('combat.creeper', checkCreeper)
+    measure('combat.arrows', checkArrows)
     if (fight) fightStep()
     // Pick up the drops once the fight is over and they've had a moment to land.
     else if (!looting && lootSpots.length && !survival.current() && Date.now() - lootSpots.at(-1).at > 600) loot()
     else if (canFight()) {
-      const threat = nextThreat()
+      const threat = measure('combat.threat', nextThreat)
       if (threat) {
         startFight(threat, { why: 'it came close' })
       }
     }
-  }, 100)
+  }), 100)
   bot.once('end', () => clearInterval(timer))
   bot.on('death', () => dropFight(false))
 

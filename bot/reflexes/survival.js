@@ -4,6 +4,7 @@
 import pathfinderPkg from 'mineflayer-pathfinder'
 import { loader as autoEat } from 'mineflayer-auto-eat'
 import armorManager from 'mineflayer-armor-manager'
+import { measure, timed } from '../core/perf.js'
 import { goWithin } from '../core/walk.js'
 
 const { goals } = pathfinderPkg
@@ -161,11 +162,11 @@ export function installSurvival(bot, { say, log, companion, resume }) {
     }
   }
 
-  const reflexTimer = setInterval(() => {
+  const reflexTimer = setInterval(timed('survival.reflexes', () => {
     if (!bot.entity) return
-    checkHazards()
-    checkDanger()
-  }, 500)
+    measure('survival.hazards', checkHazards)
+    measure('survival.danger', checkDanger)
+  }), 500)
   bot.once('end', () => clearInterval(reflexTimer))
 
   // --- Sleeping when the player sleeps ------------------------------------

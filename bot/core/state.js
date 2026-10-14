@@ -1,6 +1,7 @@
 // Builds the snapshot of the bot's situation that is sent to the backend with every chat.
 import { currentFight } from '../reflexes/combat.js'
 import { lastDeathInfo } from '../reflexes/survival.js'
+import { measure } from './perf.js'
 import { currentTask } from './tasks.js'
 import { currentWorldId } from './world.js'
 
@@ -19,30 +20,58 @@ const interestingBlock = (name) =>
 const round1 = (n) => Math.round(n * 10) / 10
 const point = (v) => ({ x: Math.floor(v.x), y: Math.floor(v.y), z: Math.floor(v.z) })
 
-// Most blocks of one type the bot counts. Searching per type means common blocks
-// (water, sand) can't use up the search and hide rarer ones (logs, ores).
+// Most blocks of one type the bot counts. Common blocks (water, sand) are searched on their own,
+// so they can't use up a shared search and hide rarer ones (logs, ores).
 const maxPerType = 100
+// Most blocks one grouped search returns, nearest first, before it stops. It only matters when a
+// group is very crowded (a dense forest, a cave full of ore); then the farthest types drop out.
+const maxPerSearch = 1500
 
-function nearbyBlocks(bot) {
-  const me = bot.entity.position
-  const groups = []
-  for (const block of bot.registry.blocksArray) {
+// Blocks that are common enough to crowd out others, so each gets a search of its own. Everything
+// else interesting is searched in two groups (logs, and the rest) rather than once per block type:
+// each search walks the whole area, so ~130 searches took over a second on every chat.
+const crowdsOthers = ['water', 'sand', 'gravel', 'clay']
+
+/** The groups of block ids to search for: one array per search. */
+export function blockSearches(registry) {
+  const own = new Map(crowdsOthers.map((name) => [name, []]))
+  const logs = []
+  const rest = []
+  for (const block of registry.blocksArray) {
     if (!interestingBlock(block.name)) continue
-    const found = bot.findBlocks({ matching: block.id, maxDistance: scanRadius, count: maxPerType })
-    // findBlocks returns the nearest first.
-    if (found.length === 0) continue
-    groups.push({
-      name: block.name,
-      count: found.length,
-      // The search stopped at the cap, so there are probably more.
-      more: found.length === maxPerType,
-      nearest: point(found[0]),
-      distance: round1(me.distanceTo(found[0])),
-    })
+    if (own.has(block.name)) own.get(block.name).push(block.id)
+    else if (block.name.endsWith('_log')) logs.push(block.id)
+    else rest.push(block.id)
   }
-  return groups.sort((a, b) => a.distance - b.distance)
+  return [...own.values(), logs, rest].filter((ids) => ids.length > 0)
 }
 
+const searchesFor = new WeakMap() // registry -> its block searches
+
+export function nearbyBlocks(bot) {
+  const me = bot.entity.position
+  const types = new Map() // name -> { count, nearest }
+  if (!searchesFor.has(bot.registry)) searchesFor.set(bot.registry, blockSearches(bot.registry))
+  for (const ids of searchesFor.get(bot.registry)) {
+    // findBlocks returns the nearest first, so the first block of a type is its nearest.
+    for (const pos of bot.findBlocks({ matching: ids, maxDistance: scanRadius, count: maxPerSearch })) {
+      const name = bot.blockAt(pos)?.name
+      if (!name) continue
+      const seen = types.get(name)
+      if (!seen) types.set(name, { count: 1, nearest: pos })
+      else if (seen.count < maxPerType) seen.count++
+    }
+  }
+  const groups = [...types].map(([name, { count, nearest }]) => ({
+    name,
+    count,
+    // The count stopped at its cap, so there are probably more.
+    more: count === maxPerType,
+    nearest: point(nearest),
+    distance: round1(me.distanceTo(nearest)),
+  }))
+  return groups.sort((a, b) => a.distance - b.distance)
+}
 function nearbyEntities(bot) {
   const me = bot.entity.position
   return Object.values(bot.entities)
@@ -84,8 +113,8 @@ export function snapshot(bot, speaker, { following = null } = {}) {
     thundering: bot.thunderState > 0,
     held_item: bot.heldItem?.name ?? null,
     inventory: bot.inventory.items().map((i) => ({ name: i.name, count: i.count })),
-    nearby_blocks: nearbyBlocks(bot),
-    nearby_entities: nearbyEntities(bot),
+    nearby_blocks: measure('snapshot.blocks', () => nearbyBlocks(bot)),
+    nearby_entities: measure('snapshot.entities', () => nearbyEntities(bot)),
     // Null when the player is too far away for the bot to see them.
     player_position: speakerEntity ? point(speakerEntity.position) : null,
     player_distance: speakerEntity ? round1(speakerEntity.position.distanceTo(me)) : null,
