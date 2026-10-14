@@ -104,7 +104,7 @@ The words this project uses for its own building blocks.
 
 **Deps (dependencies)**: Per-request data passed to `agent.run(..., deps=...)` that tools can read and write through `RunContext`. In this project, `ChatDeps`.
 
-**Haiku 4.5**: `claude-haiku-4-5`, Anthropic's cheapest current model at $1 per million input tokens and $5 per million output tokens. This project's default model. Set `MODEL_NAME` in `.env` to use another.
+**Haiku 5.5**: `claude-haiku-5-5`, Anthropic's cheapest current model at $0.10 per million input tokens and $0.50 per million output tokens (for prompts up to 100k tokens). This project's default model. Set `MODEL_NAME` in `.env` to use another.
 
 **Harness**: In `pydantic-ai-harness`, a ready-made set of capabilities for an agent. This project uses only its `Skills` capability.
 
@@ -116,7 +116,7 @@ The words this project uses for its own building blocks.
 
 **load_capability**: The tool the `Skills` capability gives the agent to load a skill's full text. You'll see it in `agent.log` when a skill is used.
 
-**Model**: The specific LLM version the agent uses, set by `MODEL_NAME` (default `claude-haiku-4-5`).
+**Model**: The specific LLM version the agent uses, set by `MODEL_NAME` (default `claude-haiku-5-5`).
 
 **Pydantic AI**: The Python framework the agent is built with. It handles the loop of calling the model, running tools and validating output.
 

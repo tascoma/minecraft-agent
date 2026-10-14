@@ -15,7 +15,10 @@ class Settings(BaseSettings):
     )
 
     anthropic_api_key: SecretStr
-    model_name: str = 'claude-haiku-4-5'
+    model_name: str = 'claude-haiku-5-5'
+    # How hard the model thinks: low, medium, high, xhigh or max. Unset uses the model's default
+    # (medium on Haiku 5.5). Lower is cheaper and quicker.
+    effort: str | None = None
     skills_dir: Path = REPO_ROOT / 'skills'
     # Things the agent remembers between runs, like named places.
     data_dir: Path = REPO_ROOT / 'backend' / 'data'

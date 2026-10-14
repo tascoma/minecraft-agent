@@ -51,7 +51,13 @@ agent = Agent(
     # conversation, so the 2nd and 3rd model requests of a run (after tool calls) reuse the
     # instructions and history too; those change between messages because of the status line.
     # Cache reads cost a tenth of normal input; writes 1.25x.
-    model_settings=AnthropicModelSettings(anthropic_cache_tool_definitions=True, anthropic_cache=True),
+    # Effort is set through anthropic_effort rather than the unified `thinking` setting, which
+    # pydantic-ai 2.54 doesn't map correctly for Haiku 5.5.
+    model_settings=AnthropicModelSettings(
+        anthropic_cache_tool_definitions=True,
+        anthropic_cache=True,
+        **({'anthropic_effort': settings.effort} if settings.effort else {}),
+    ),
     # Haiku often writes its reply next to a tool call and then answers the tool result with nothing.
     # Retrying makes it call the tool again, so don't retry much; the /chat route falls back to that
     # earlier text instead.

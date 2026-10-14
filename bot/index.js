@@ -350,7 +350,8 @@ function connect() {
     }
     const { reply, actions = [], protected_places: protectedPlaces } = await res.json()
     setProtectedSpots(protectedPlaces)
-    say(reply)
+    // An empty reply means the agent had nothing to say.
+    if (reply) say(reply)
     actions.forEach((action, i) => runAction(action, { first: i === 0 }))
   }
 

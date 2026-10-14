@@ -23,7 +23,7 @@ def client(tmp_path, monkeypatch):
 
 
 def react(monkeypatch, on=True):
-    monkeypatch.setattr(chat_route, 'settings', SimpleNamespace(react_to_events=on, react_min_gap_s=120))
+    monkeypatch.setattr(chat_route, 'settings', SimpleNamespace(react_to_events=on, react_min_gap_s=120, model_name='test-model', effort=None))
 
 
 def test_events_are_only_recorded_when_reactions_are_off(client, monkeypatch):
@@ -52,3 +52,9 @@ def test_routine_events_never_reach_the_agent(client, monkeypatch):
     with agent.override(model=TestModel(custom_output_text='should not be said')):
         reply = client.post('/events', json={'kind': 'job', 'text': 'making 4 stick: Made 4 sticks.'}).json()
     assert reply['reply'] == ''
+
+
+def test_skip_in_chat_says_nothing(client):
+    with agent.override(model=TestModel(call_tools=[], custom_output_text='SKIP')):
+        reply = client.post('/chat', json={'username': 'Steve', 'message': 'lol'}).json()
+    assert reply['reply'] == '' and reply['actions'] == []

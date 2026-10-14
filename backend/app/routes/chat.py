@@ -16,6 +16,7 @@ from app.services.budget import Budget, basic_command
 from app.services.chests import Chest, get_chest_store
 from app.services.journal import Event, get_journal
 from app.services.places import get_place_store, protected_spots
+from app.services.runlog import log_run
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -38,6 +39,21 @@ def usage_of(messages: list[ModelMessage]) -> RunUsage:
     return usage
 
 
+def log_agent_run(
+    kind: str, username: str, started: float, usage: RunUsage, cost: float, messages: list[ModelMessage]
+) -> None:
+    log_run(
+        kind,
+        username=username,
+        model=settings.model_name,
+        effort=settings.effort,
+        seconds=time.perf_counter() - started,
+        usage=usage,
+        cost=cost,
+        messages=messages,
+    )
+
+
 def over_budget(request: ChatRequest) -> ChatResponse:
     """The reply when the hour's Claude budget is spent: handle the basic commands without the agent."""
     wait = f'about {budget.minutes_until_free()} min'
@@ -50,6 +66,12 @@ def over_budget(request: ChatRequest) -> ChatResponse:
         reply=f"I've used my thinking budget for this hour, so I can only follow, stay or come for {wait}. "
         'I still fight, eat and keep myself safe.'
     )
+
+
+def spoken(reply: str) -> str:
+    """The agent replies SKIP when there is nothing worth saying (an event that needs no comment, a
+    "lol"). That means say nothing, in chat as well as for events."""
+    return '' if reply.strip().upper() == 'SKIP' else reply
 
 
 def last_text(messages: list[ModelMessage]) -> str | None:
@@ -121,9 +143,10 @@ async def record_event(report: EventReport, world: str | None = None) -> ChatRes
         return ChatResponse(reply='')
     last_reaction = time.monotonic()
     logger.info('reacting to event for %s: %s', report.player, report.text)
-    response = await run_agent(report.player, f'[Event, not something {report.player} said] {report.text}', report.state)
-    # The agent replies SKIP when there's nothing worth saying.
-    return response if response.reply.strip().upper() != 'SKIP' else response.model_copy(update={'reply': ''})
+    response = await run_agent(
+        report.player, f'[Event, not something {report.player} said] {report.text}', report.state, kind='event'
+    )
+    return response
 
 
 @router.post('/chat')
@@ -131,11 +154,12 @@ async def chat(request: ChatRequest) -> ChatResponse:
     logger.info('chat from %s: %s', request.username, request.message)
     if budget.exhausted():
         logger.warning('over the budget of $%.2f/hour (spent $%.3f); not calling the agent', budget.dollars_per_hour, budget.spent())
+        log_run('over_budget', username=request.username, model=settings.model_name, effort=settings.effort)
         return over_budget(request)
     return await run_agent(request.username, f'{request.username}: {request.message}', request.state)
 
 
-async def run_agent(username: str, prompt: str, state: BotState | None) -> ChatResponse:
+async def run_agent(username: str, prompt: str, state: BotState | None, kind: str = 'chat') -> ChatResponse:
     """One agent run for `username`, with their recent conversation, logged and counted against the budget."""
     if state:
         logger.info(world.describe_status(state))
@@ -147,21 +171,26 @@ async def run_agent(username: str, prompt: str, state: BotState | None) -> ChatR
             result = await agent.run(prompt, deps=deps, message_history=memory.history(username, world_id))
         except UnexpectedModelBehavior:
             log_messages(messages, failed=True)
-            budget.record(usage_of(messages))
+            usage = usage_of(messages)
+            cost = budget.record(usage)
             # The tools already did their job (e.g. queued "follow"); don't throw that away
             # just because the model ended with an empty message. Use what it said earlier.
             if deps.actions:
                 reply = last_text(messages) or FALLBACK_REPLY
                 logger.warning('agent ended without a reply; sending its actions with: %s', reply)
+                log_agent_run('fallback', username, started, usage, cost, messages)
                 memory.remember_fallback(username, messages, reply, world_id)
                 return ChatResponse(
-                    reply=reply, actions=unique_actions(deps.actions), protected_places=protected_spots(deps.places)
+                    reply=spoken(reply), actions=unique_actions(deps.actions), protected_places=protected_spots(deps.places)
                 )
             logger.exception('agent run failed for message from %s', username)
+            log_agent_run('error', username, started, usage, cost, messages)
             raise
         except Exception:
             log_messages(messages, failed=True)
-            budget.record(usage_of(messages))
+            usage = usage_of(messages)
+            cost = budget.record(usage)
+            log_agent_run('error', username, started, usage, cost, messages)
             logger.exception('agent run failed for message from %s', username)
             raise
 
@@ -169,6 +198,7 @@ async def run_agent(username: str, prompt: str, state: BotState | None) -> ChatR
     memory.remember(username, result.new_messages(), world_id)
     usage = result.usage
     cost = budget.record(usage)
+    log_agent_run(kind, username, started, usage, cost, result.new_messages())
     logger.info(
         'reply to %s (%.1fs, %d in (%d cached, %d cache writes) / %d out tokens, %d requests, $%.4f, $%.3f this hour): %s',
         username,
@@ -183,5 +213,5 @@ async def run_agent(username: str, prompt: str, state: BotState | None) -> ChatR
         result.output,
     )
     return ChatResponse(
-        reply=result.output, actions=unique_actions(deps.actions), protected_places=protected_spots(deps.places)
+        reply=spoken(result.output), actions=unique_actions(deps.actions), protected_places=protected_spots(deps.places)
     )

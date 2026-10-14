@@ -31,8 +31,10 @@ class Prices:
         return self.input * 1.25
 
 
-# By a fragment of the model name. Anything else is priced like the default model, Haiku 4.5.
+# By a fragment of the model name. Anything else is priced like the default model, Haiku 5.5.
+# Haiku 5.5 is priced for prompts up to 100k tokens; the agent's prompts are far below that.
 PRICES = {
+    'haiku-5-5': Prices(input=0.1, output=0.5),
     'haiku-4-5': Prices(input=1.0, output=5.0),
     'sonnet-5': Prices(input=2.0, output=10.0),
     'opus-5': Prices(input=4.0, output=20.0),
@@ -40,7 +42,7 @@ PRICES = {
 
 
 def prices_for(model_name: str) -> Prices:
-    return next((p for fragment, p in PRICES.items() if fragment in model_name), PRICES['haiku-4-5'])
+    return next((p for fragment, p in PRICES.items() if fragment in model_name), PRICES['haiku-5-5'])
 
 
 def run_cost(usage: RunUsage, prices: Prices) -> float:
