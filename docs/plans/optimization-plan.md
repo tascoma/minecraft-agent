@@ -196,13 +196,33 @@ No tokens, but it's latency on every chat and CPU while playing. Measure before 
 - **Not measured:** the handlers during a fight (the windows so far had at most a short zombie fight earlier). `combat.tick` includes the fight step, so it will show up in the next `perf:` lines after a fight. The sleep/wake gap (one window showed a 264 s loop stall and a third of the expected ticks) is the laptop sleeping, not the bot.
 - I did not run `check:combat` to force a fight: it summons husks next to the bot, which follows you.
 
-## Phase 5: Guardrails
+## Phase 5: Guardrails ✅
 
 | Item | Saves | Where | Status |
 |---|---|---|---|
-| A test that fails when the tool definitions grow past a token limit, so growth is a choice (the 4096 floor check is no longer needed on Haiku 5.5) | Tokens | `backend/tests/test_agent.py` | 🔲 |
-| Show spend in game: "how much have you spent?" answers from the budget without the agent (fast path) | Calls | `services/commands.py` | 🔲 |
-| Update the stale Haiku 4.5 cache-floor comment at `agent.py:48-53`, and the README's cost paragraph and `architecture.md` with the measured per-message cost once phases 1–3 land | n/a | docs | 🔲 |
+| A test that fails when the tool definitions grow past a token limit, so growth is a choice (the 4096 floor check is no longer needed on Haiku 5.5). `test_tool_definitions_stay_under_their_size_limit` sends one run to a stub model, collects every tool (the 35 output tools too) and fails above 18,600 characters of JSON, about 8,000 tokens against 7,287 measured today. It works offline; the limit comes from `count_tokens` at 2.32 characters per token | Tokens | `backend/tests/test_agent.py` | ✅ |
+| Show spend in game: "how much have you spent?" answers from the budget without the agent (fast path). Also handles "what's your budget" and "how much budget is left". It says what was spent in the last hour, the hourly limit, and for how long the bot only follows, stays and comes if the limit is used up | Calls | `services/commands.py`, `routes/chat.py` | ✅ |
+| Update the stale Haiku 4.5 cache-floor comment at `agent.py:48-53`, and the README's cost paragraph and `architecture.md` with the measured per-message cost once phases 1–3 land. The stale comment was replaced in Phase 3; the README and a new "What a chat costs" table in `architecture.md` carry the numbers | n/a | docs | ✅ |
+
+Two fixes found along the way:
+
+- `count-prompt-tokens.py` was written before Phase 2 and only counted the normal tools; it now includes the action tools, which are output tools. The total is unchanged (7,287 tokens, 46 tools), and the script now reports instructions (944 tokens, cached) and a typical status line (96 tokens, not cached) separately.
+- Phase 1's fast path missed "Claude, stop": with a friend online the filter requires the bot's name, which made the message longer than the exact command. The name (`MC_USERNAME`, now also read by the backend) is ignored at either end of an exact command, small talk or spend question.
+
+### Where this ended up
+
+The 32-message replay against the real model, from the Phase 0 baseline to the end:
+
+| | Phase 0 baseline | After Phase 5 |
+|---|---|---|
+| Total cost, 32 messages | $0.0126 | $0.0068 (about 46% less) |
+| Messages that run the agent | 32 | 25 (7 are free and instant) |
+| Model requests per action run | 2 | 1.07 |
+| Latency of an action run | 2.4 s | 1.6 s |
+| Cache writes per agent run | 1,408 | 484 |
+| Bot freeze on each chat | 1.25 s | 0.19 s |
+
+The total is a conservative comparison: the baseline replay used one fixed state, which made its cache look better than real play, while the later runs moved the state between messages. The cost per message is small to begin with at Haiku 5.5 prices (about two hundredths of a cent per message on average), so the lasting gains are latency and the bot no longer freezing; the savings in dollars are a bonus. The numbers move with the model's own choices (thinking, tool picks), so re-run the replay before trusting a single result.
 
 ---
 

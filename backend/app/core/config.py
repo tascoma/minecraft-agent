@@ -16,6 +16,8 @@ class Settings(BaseSettings):
 
     anthropic_api_key: SecretStr
     model_name: str = 'claude-haiku-5-5'
+    # The bot's Minecraft name (the same MC_USERNAME the bot reads). "Claude, stop" counts as "stop".
+    mc_username: str = 'Claude'
     # How hard the model thinks: low, medium, high, xhigh or max. Unset uses the model's default
     # (medium on Haiku 5.5). Lower is cheaper and quicker.
     effort: str | None = None

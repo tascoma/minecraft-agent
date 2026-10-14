@@ -54,7 +54,7 @@ The words this project uses for its own building blocks.
 
 **Note**: Something the player asked the agent to remember for good ("the mine floods"), saved with `remember_note` per world (`notes.json`) and shown in the agent's instructions on every message.
 
-**Fast path**: Chat the backend answers without running the agent: exact one-word commands ("stop", "follow me", "come here") and small talk ("lol", "thanks"). Costs nothing and answers at once (`services/commands.py`).
+**Fast path**: Chat the backend answers without running the agent: exact one-word commands ("stop", "follow me", "come here"; the bot's name at either end is ignored), small talk ("lol", "thanks") and "how much have you spent?". Costs nothing and answers at once (`services/commands.py`).
 
 **Budget**: The most Claude may cost in an hour (`BUDGET_DOLLARS_PER_HOUR`, default $0.50). Past it the bot handles only stay, follow and come by itself until the hour's spend drops (`services/budget.py`).
 

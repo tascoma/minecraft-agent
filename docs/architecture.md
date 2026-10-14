@@ -92,7 +92,7 @@ In this project, tools come in two kinds:
 - **Action tools** change the world. They don't touch Minecraft directly, because the backend can't. They append a `BotAction` that is sent back to the bot in the `/chat` response, and the bot carries it out. Examples: `follow_player`, `stay_here`. They are registered as *output tools*: calling one ends the run, so the model writes its reply in the same message as the call and no second request is needed. Query tools stay normal tools, because the model needs their results before it answers.
 - **Query tools** read the world: `check_inventory`, `look_around`, `nearby_entities`, `where_are_we`, `find_item`. They read the state snapshot the bot sends with each request (formatted by `app/services/world.py`), or for `find_item` the chest memory, so they never call back into the bot. A status line (world, health, food, position, time, weather, tools, current job, what it's fighting and who it's following) is also added to the agent's instructions on every run.
 
-A tool should be **one clear action** with a description precise enough for Claude to know when to use it. Tool definitions are sent on every request, so each new tool adds a few tokens per message.
+A tool should be **one clear action** with a description precise enough for Claude to know when to use it. Tool definitions are sent on every request, so each new tool adds about 150 tokens per message (cached, so cheap, but not free). A test in `tests/test_agent.py` fails when they pass about 8,000 tokens in total, so growth is a choice.
 
 ### Skill
 
@@ -194,6 +194,19 @@ sequenceDiagram
 ```
 
 Not every message gets that far. The bot drops chat that isn't meant for it when two or more players are around (it needs the bot's name, or to come soon after the bot spoke to that player), and answers one player's lines one at a time, joining any that pile up while it waits. The backend answers exact one-word commands ("stop", "follow me", "come here") and small talk ("lol", "thanks") by itself, with no agent run (`services/commands.py`). Anything longer goes to the agent as above.
+
+### What a chat costs
+
+Measured on Haiku 5.5 with the 32-message replay (`backend/scripts/replay.py`) and the run lines in `agent.log` (`backend/scripts/token-report.py`):
+
+| Message | Model requests | Cost | Time |
+|---|---|---|---|
+| Exact command ("stop", "follow me"), small talk ("lol"), "how much have you spent?" | 0 | $0 | instant |
+| Starts a job ("get me 64 coal") | 1 | about $0.0003 | about 1.6 s |
+| Needs a lookup first ("what do you have?") | 2 | about $0.0004 | about 2 s |
+| The first message after an hour without chat (cache cold) | 1-2 | about $0.002 | about 2 s |
+
+About 8.5k input tokens go out on each request (7.3k of tool definitions, 0.9k of instructions, then the status line and the conversation), nearly all read from the prompt cache at a tenth of the price. Every chat also costs the bot about 0.2 s to build its state snapshot.
 
 Meanwhile, with no chat at all, the follow reflex keeps running in the bot. That's why following costs nothing.
 

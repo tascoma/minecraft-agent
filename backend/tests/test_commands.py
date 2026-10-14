@@ -7,7 +7,7 @@ from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart, ToolRetu
 from app.agents import agent as agent_module
 from app.agents.agent import ChatDeps, agent
 from app.main import app
-from app.services.commands import COMMANDS, exact_command, is_small_talk
+from app.services.commands import COMMANDS, asks_about_spend, exact_command, is_small_talk
 from app.services.memory import memory
 from pydantic_ai.models.function import FunctionModel
 
@@ -137,3 +137,82 @@ def test_fast_command_text_matches_what_the_tools_say():
     }
     for spec in COMMANDS.values():
         assert tools[spec.tool](ctx) == spec.tool_result.format(username='Steve')
+
+
+@pytest.mark.parametrize(
+    ('message', 'command'),
+    [('Claude, stop', 'stay'), ('claude follow me', 'follow'), ('come here, Claude!', 'come'), ('Claude: please come', 'come')],
+)
+def test_the_bots_name_does_not_stop_a_command_counting(message, command):
+    assert exact_command(message, 'Claude') == command
+    assert exact_command(message) is None, 'without the name configured it is a longer message'
+
+
+def test_the_name_alone_or_in_the_middle_is_not_stripped():
+    assert exact_command('Claude', 'Claude') is None
+    assert exact_command('stop claude following me', 'Claude') is None
+    assert is_small_talk('thanks claude', 'Claude')
+
+
+@pytest.mark.parametrize(
+    'message',
+    ['how much have you spent?', 'How much did you spend', 'claude, how much have you spent so far?', "what's your budget", 'How much budget is left?'],
+)
+def test_spend_questions(message):
+    assert asks_about_spend(message, 'Claude')
+
+
+@pytest.mark.parametrize('message', ['how much wood do you have', 'how much have you got in the chest', 'spend the diamonds on a sword', 'what do you cost to run, in detail please explain'])
+def test_other_questions_are_not_spend_questions(message):
+    assert not asks_about_spend(message, 'Claude')
+
+
+def test_spend_question_is_answered_from_the_budget_without_the_agent(monkeypatch):
+    from pydantic_ai.usage import RunUsage
+
+    from app.routes import chat as chat_route
+    from app.services.budget import Budget
+
+    spent = Budget(0.5, 'claude-haiku-5-5')
+    spent.record(RunUsage(input_tokens=1_000_000))  # $0.10
+    monkeypatch.setattr(chat_route, 'budget', spent)
+    with agent.override(model=FunctionModel(agent_must_not_run)):
+        response = client.post('/chat', json={'username': 'Steve', 'message': 'how much have you spent?'}).json()
+    assert response['reply'] == "I've spent about $0.10 of my $0.50 hourly budget in the last hour."
+    assert response['actions'] == []
+
+
+def test_amounts_keep_their_digits_when_small():
+    from app.routes.chat import spent_phrase
+
+    assert [spent_phrase(x) for x in (0, 0.00004, 0.0042, 0.0099, 0.01, 0.1, 0.5)] == [
+        'nothing', 'less than $0.0001', 'about $0.0042', 'about $0.0099', 'about $0.01', 'about $0.10', 'about $0.50'
+    ]
+
+
+def test_spend_answer_says_when_the_budget_is_used_up_or_unlimited(monkeypatch):
+    from pydantic_ai.usage import RunUsage
+
+    from app.routes import chat as chat_route
+    from app.services.budget import Budget
+
+    used_up = Budget(0.05, 'claude-haiku-5-5')
+    used_up.record(RunUsage(input_tokens=1_000_000))
+    monkeypatch.setattr(chat_route, 'budget', used_up)
+    assert 'only follow, stay and come for about' in chat_route.spend_reply()
+    monkeypatch.setattr(chat_route, 'budget', Budget(0, 'claude-haiku-5-5'))
+    assert 'no limit set' in chat_route.spend_reply()
+
+
+def test_spend_exchange_is_remembered_so_a_follow_up_makes_sense():
+    seen = []
+
+    def respond(messages, info):
+        seen.append(messages)
+        return ModelResponse(parts=[TextPart('Not much, really.')])
+
+    with agent.override(model=FunctionModel(respond)):
+        client.post('/chat', json={'username': 'Steve', 'message': 'how much have you spent?'})
+        client.post('/chat', json={'username': 'Steve', 'message': 'is that a lot?'})
+    texts = [p.content for m in seen[0] for p in m.parts if hasattr(p, 'content') and isinstance(p.content, str)]
+    assert any('hourly budget' in t for t in texts), 'the agent sees what the bot said about spending'
