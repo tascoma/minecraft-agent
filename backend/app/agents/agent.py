@@ -46,17 +46,22 @@ agent = Agent(
         provider=AnthropicProvider(api_key=settings.anthropic_api_key.get_secret_value()),
     ),
     deps_type=ChatDeps,
-    # Prompt caching. The ~5k tokens of tool definitions are identical on every request, so they're
-    # cached on their own (Haiku 4.5 only caches prefixes of 4096+ tokens, which they clear) and reused
-    # across messages for 5 minutes. Automatic caching then moves a second breakpoint along the
-    # conversation, so the 2nd and 3rd model requests of a run (after tool calls) reuse the
-    # instructions and history too; those change between messages because of the status line.
-    # Cache reads cost a tenth of normal input; writes 1.25x.
+    # Prompt caching, in three layers reused from one message to the next: the ~7k tokens of tool
+    # definitions (they never change, so they're kept for an hour; in real play they were rewritten after
+    # gaps of 7-35 minutes in 5 of 49 runs), the instructions (they change only when a
+    # note, saved place, chest count or recent event does), and the conversation, via an automatic
+    # breakpoint that moves along it. The status line leads the player's message, not the instructions,
+    # so it doesn't invalidate the layers before it. The instructions and conversation are kept for 5
+    # minutes. Cache reads cost a tenth of normal input; 5-minute writes 1.25x, 1-hour writes 2x. Haiku
+    # 5.5 caches prefixes of 512+ tokens.
     # Effort is set through anthropic_effort rather than the unified `thinking` setting, which
     # pydantic-ai 2.54 doesn't map correctly for Haiku 5.5.
+    # max_tokens caps a runaway answer (thinking counts against it); replies are a sentence or two.
     model_settings=AnthropicModelSettings(
-        anthropic_cache_tool_definitions=True,
+        anthropic_cache_tool_definitions='1h',
+        anthropic_cache_instructions=True,
         anthropic_cache=True,
+        max_tokens=2048,
         **({'anthropic_effort': settings.effort} if settings.effort else {}),
     ),
     # Haiku often writes its reply next to a tool call and then answers the tool result with nothing.
@@ -580,8 +585,9 @@ RECENT_EVENTS = 5
 RECENT_WITHIN_S = 3 * 3600
 
 
-# Instructions are sent in this order. The ones that rarely change come first, so prompt caching can
-# reuse them from one message to the next; the status line changes nearly every message, so it's last.
+# Instructions are sent in this order, from least to most often changed, so prompt caching can reuse
+# as much as possible from one message to the next. The status line, which changes nearly every
+# message, isn't here: it leads the player's message instead (see `world.with_status`).
 
 
 @agent.instructions
@@ -591,6 +597,12 @@ def notes(ctx: RunContext[ChatDeps]) -> str:
     if not kept:
         return ''
     return 'Things you were asked to remember (newest last):\n' + '\n'.join(f'- {n.by}: {n.text}' for n in kept)
+
+
+@agent.instructions
+def saved_places(ctx: RunContext[ChatDeps]) -> str:
+    """Saved place names, so the agent knows what "go home" refers to without a lookup."""
+    return world.describe_places(ctx.deps.places.all(), ctx.deps.state)
 
 
 @agent.instructions
@@ -608,18 +620,6 @@ def recent_events(ctx: RunContext[ChatDeps]) -> str:
         return ''
     lines = '\n'.join(f'- {ctx.deps.journal.ago(e.at)}: {e.text}' for e in events)
     return f'What happened recently (newest last; use recall for older things):\n{lines}'
-
-
-@agent.instructions
-def saved_places(ctx: RunContext[ChatDeps]) -> str:
-    """Saved place names, so the agent knows what "go home" refers to without a lookup."""
-    return world.describe_places(ctx.deps.places.all(), ctx.deps.state)
-
-
-@agent.instructions
-def status(ctx: RunContext[ChatDeps]) -> str:
-    """Health, hunger, position, time and weather, so every reply can take them into account."""
-    return world.describe_status(ctx.deps.state) if ctx.deps.state else NO_STATE
 
 
 @agent.tool

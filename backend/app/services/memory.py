@@ -8,7 +8,9 @@ is enough and stops calling the tools.
 import time
 from dataclasses import dataclass, field, replace
 
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolReturnPart
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolReturnPart, UserPromptPart
+
+from app.services.world import without_status
 
 # How many exchanges to remember per player.
 MAX_EXCHANGES = 5
@@ -19,14 +21,17 @@ MAX_TOOL_RESULT_CHARS = 300
 
 
 def compact(messages: list[ModelMessage]) -> list[ModelMessage]:
-    """Shorten an exchange for keeping: trim long tool results and drop the per-run instructions
-    (the status line etc. is out of date by the next message; the agent gets fresh ones)."""
+    """Shorten an exchange for keeping: trim long tool results and drop the status line and the per-run
+    instructions (they're out of date by the next message; the agent gets fresh ones)."""
     kept: list[ModelMessage] = []
     for message in messages:
         if isinstance(message, ModelRequest):
             parts = [
                 replace(p, content=p.model_response_str()[:MAX_TOOL_RESULT_CHARS])
-                if isinstance(p, ToolReturnPart) else p
+                if isinstance(p, ToolReturnPart)
+                else replace(p, content=without_status(p.content))
+                if isinstance(p, UserPromptPart) and isinstance(p.content, str)
+                else p
                 for p in message.parts
             ]
             kept.append(replace(message, parts=parts, instructions=None))

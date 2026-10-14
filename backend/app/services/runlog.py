@@ -45,6 +45,7 @@ def log_run(
         'input': usage.input_tokens,
         'cached': usage.cache_read_tokens,
         'cache_writes': usage.cache_write_tokens,
+        'cache_writes_1h': usage.details.get('ephemeral_1h_input_tokens', 0),
         'output': usage.output_tokens,
         'requests': usage.requests,
         'cost': round(cost, 6),

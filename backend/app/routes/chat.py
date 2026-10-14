@@ -8,7 +8,7 @@ from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
 from pydantic_ai.usage import RunUsage
 
-from app.agents.agent import OUTPUT_TYPES, ChatDeps, agent
+from app.agents.agent import NO_STATE, OUTPUT_TYPES, ChatDeps, agent
 from app.schema.chat import BotAction, BotState, ChatRequest, ChatResponse, EventReport, ProtectedSpot
 from app.services import world
 from app.services.memory import memory
@@ -206,8 +206,11 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
 async def run_agent(username: str, prompt: str, state: BotState | None, kind: str = 'chat') -> ChatResponse:
     """One agent run for `username`, with their recent conversation, logged and counted against the budget."""
+    status = world.describe_status(state) if state else NO_STATE
     if state:
-        logger.info(world.describe_status(state))
+        logger.info(status)
+    # The status leads the message, not the instructions, so the instructions stay cacheable.
+    prompt = world.with_status(prompt, status)
     started = time.perf_counter()
     world_id = state.world_id if state else None
     deps = ChatDeps(username=username, state=state)

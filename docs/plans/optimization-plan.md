@@ -132,19 +132,38 @@ The biggest savings: a call that never happens costs nothing and answers instant
 - The `UnexpectedModelBehavior` fallback in `routes/chat.py` (actions kept when the model answers a tool result with nothing) can no longer trigger for action tools. It is left in as a cheap safety net.
 - The other three items wait for Phase 3: whether adding the inventory or a nearby digest to the status line pays depends on where the status sits.
 
-## Phase 3: Fewer tokens per request
+## Phase 3: Fewer tokens per request ✅
 
 | Item | Saves | Where | Status |
 |---|---|---|---|
-| **Move the status line out of the system instructions** and into the start of the user message (`[Status] … \n Steve: get wood`). The system prompt and earlier history then stay the same between messages and get cache reads. This also changes `test_agent.py:37`, which asserts the status is in the instructions. Only after this move can the static instructions get their own cache breakpoint (`anthropic_cache_instructions`): today all `@agent.instructions` form one system block ending in the status line (`agent.py:561-596`), so a breakpoint would land after the status `compact()` strips the status block from stored messages so old statuses don't pile up in history. Verify with Phase 0's cache hit rate | Tokens | `agents/agent.py`, `services/memory.py` | 🔲 |
-| Order the remaining dynamic instructions from least to most often changed (notes → places → chest count → recent events), and move recent events next to the status if it changes as often | Tokens | `agents/agent.py` | 🔲 |
-| **Trim tool descriptions.** Cut repeated phrases ("The bot will…" appears in 31 tool *results* and the "do not claim/say" wording in 15; say it once in the instructions instead), and keep examples only where the model gets names wrong. The cache floor is only 512 tokens on Haiku 5.5 (see ground rules) | Tokens | `agents/agent.py` | 🔲 |
-| **Merge near-duplicate tools**: `store_items` / `take_items` / `check_chests` / `sort_chests` → one `chests(action, …)`, `villager_trades` / `trade_with_villager` → one, `pillar_up` / `bridge` → one. Only if the replay set shows the model still picks the right one | Tokens | `agents/agent.py` | 🔲 |
-| Shorten tool results: one short clause each ("Queued.") once the "don't claim it's done" rule lives in the instructions | Tokens | `agents/agent.py` | 🔲 |
-| Drop `World id` from the status line; the model never needs it | Tokens | `services/world.py` | 🔲 |
-| History: try 3 exchanges instead of 5, and 150-char tool results instead of 300. Check that follow-ups ("get it", "do that again") still work on the replay set | Tokens | `services/memory.py` | 🔲 |
-| Set `max_tokens` so a rambling reply can't run up output tokens; replies are one or two sentences anyway. Haiku 5.5 thinks by default and thinking counts against `max_tokens`, so ~300 could cut off a reply before any text. Size it after measuring thinking, or lower the effort first | Tokens | `agents/agent.py` | 🔲 |
-| Try the 1-hour cache TTL for tool definitions (`anthropic_cache_tool_definitions='1h'` is already supported, so no new plumbing). A write costs 2x instead of 1.25x but survives quiet stretches. Worth it only if Phase 0 shows many cache writes after gaps of 5–60 min | Tokens | `agents/agent.py`, `services/budget.py` (price the 1 h write) | 🔲 |
+| **Move the status line out of the system instructions** and into the start of the user message (`[Status] … \n Steve: get wood`). The system prompt and earlier history then stay the same between messages and get cache reads. This also changes `test_agent.py:37`, which asserts the status is in the instructions. Only after this move can the static instructions get their own cache breakpoint (`anthropic_cache_instructions`): today all `@agent.instructions` form one system block ending in the status line (`agent.py:561-596`), so a breakpoint would land after the status `compact()` strips the status block from stored messages so old statuses don't pile up in history. Verify with Phase 0's cache hit rate. Done, with the instructions breakpoint on (see the result below) | Tokens | `agents/agent.py`, `services/world.py`, `services/memory.py`, `routes/chat.py` | ✅ |
+| Order the remaining dynamic instructions from least to most often changed (notes → places → chest count → recent events), and move recent events next to the status if it changes as often. Done; recent events stay in the instructions, since they change when a job ends, not on every message | Tokens | `agents/agent.py` | ✅ |
+| **Trim tool descriptions.** Cut repeated phrases ("The bot will…" appears in 31 tool *results* and the "do not claim/say" wording in 15; say it once in the instructions instead), and keep examples only where the model gets names wrong. The cache floor is only 512 tokens on Haiku 5.5 (see ground rules). **Skipped:** the tool block is read from the cache at $0.01 per million tokens, so a 20% trim saves about $0.000015 per request, which is not worth the risk of the model picking the wrong tool | Tokens | `agents/agent.py` | ➖ |
+| **Merge near-duplicate tools**: `store_items` / `take_items` / `check_chests` / `sort_chests` → one `chests(action, …)`, `villager_trades` / `trade_with_villager` → one, `pillar_up` / `bridge` → one. Only if the replay set shows the model still picks the right one. **Skipped** for the same reason as trimming the descriptions | Tokens | `agents/agent.py` | ➖ |
+| Shorten tool results: one short clause each ("Queued.") once the "don't claim it's done" rule lives in the instructions. **Moot:** since Phase 2 the model never sees an action tool's result (the run ends at the call), so shortening them saves no tokens; lookup tools return data the model needs | Tokens | `agents/agent.py` | ➖ |
+| Drop `World id` from the status line; the model never needs it | Tokens | `services/world.py` | ✅ |
+| History: try 3 exchanges instead of 5, and 150-char tool results instead of 300. Check that follow-ups ("get it", "do that again") still work on the replay set. **Skipped:** the history is cache reads now, so the saving is negligible and the follow-ups ("get it", "do that again") are the thing it could break | Tokens | `services/memory.py` | ➖ |
+| Set `max_tokens` so a rambling reply can't run up output tokens; replies are one or two sentences anyway. Haiku 5.5 thinks by default and thinking counts against `max_tokens`, so ~300 could cut off a reply before any text. Size it after measuring thinking, or lower the effort first. Set to 2048: the biggest answer in the replay used about 420 output tokens, and this only stops a runaway | Tokens | `agents/agent.py` | ✅ |
+| Try the 1-hour cache TTL for tool definitions (`anthropic_cache_tool_definitions='1h'` is already supported, so no new plumbing). A write costs 2x instead of 1.25x but survives quiet stretches. Worth it only if Phase 0 shows many cache writes after gaps of 5–60 min. Done: in real play (`agent.log`) 5 of 49 runs rewrote the 7k-token tool block after a gap of 7–35 minutes, which an hour-long entry avoids. `budget.py` now prices the one-hour part of cache writes at 2x, from `usage.details` | Tokens | `agents/agent.py`, `services/budget.py` | ✅ |
+
+➖ means decided against, with the reason in the row.
+
+**Result** (replay with the stub state now changing between messages, as a real status line does; run lines in `backend/logs/replay-p3-*.log`):
+
+| | Before | Status moved | + instructions breakpoint | + 1 h tool cache (final) |
+|---|---|---|---|---|
+| Cache writes per agent run (avg) | 1,348 | 1,341 | 466 | 484 |
+| Cache hit rate | 89% | 89% | 96% | 96% |
+| Cost per agent run (avg) | $0.0004 | $0.0004 | $0.0003 | $0.0003 |
+| Total, 32 messages | $0.0093 | $0.0091 | $0.0065 | $0.0068 |
+| Latency per agent run (avg) | 1.8 s | 1.8 s | 1.7 s | 2.2 s |
+
+- Moving the status alone changed almost nothing. The instructions block had no cache breakpoint of its own, so it was rewritten on every fresh conversation whether or not the status was in it. The breakpoint (`anthropic_cache_instructions`) is what cut the writes by about two thirds.
+- Latency did not improve and varies run to run (1.7–2.2 s) with the model's own time; take it as flat.
+- The replay is mostly fresh conversations, so it shows the instructions and tool layers. The history layer (the moving breakpoint) gains more in real play with longer conversations; read the real rate from `agent.log` after play.
+- Kept conversations drop the status line (`memory.compact`), so the stored history differs from what was sent for the latest exchange only; everything older is identical and reads from the cache.
+- The one-hour write was not exercised by the replay (the tool block was still cached from an earlier 5-minute run, and a one-hour request can read that). It was verified once the entry had expired: the first message afterwards wrote 8,240 tokens, 7,196 of them (the tool block) at the one-hour rate, and the logged cost matched the 2x price.
+- Cheap guardrail for Phase 5: a test that the instructions don't change when only the status does (added: `test_status_leads_the_message_and_stays_out_of_the_instructions`).
 
 ## Phase 4: Bot-side performance
 

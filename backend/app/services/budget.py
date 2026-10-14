@@ -27,8 +27,12 @@ class Prices:
 
     @property
     def cache_write(self) -> float:
-        # Five-minute cache writes, the only kind the agent uses.
+        # Five-minute cache writes.
         return self.input * 1.25
+
+    @property
+    def cache_write_1h(self) -> float:
+        return self.input * 2.0
 
 
 # By a fragment of the model name. Anything else is priced like the default model, Haiku 5.5.
@@ -52,6 +56,8 @@ def run_cost(usage: RunUsage, prices: Prices) -> float:
         uncached * prices.input
         + usage.cache_read_tokens * prices.cache_read
         + usage.cache_write_tokens * prices.cache_write
+        # `cache_write_tokens` counts one-hour writes too, priced as five-minute ones above; add the difference.
+        + usage.details.get('ephemeral_1h_input_tokens', 0) * (prices.cache_write_1h - prices.cache_write)
         + usage.output_tokens * prices.output
     ) / 1_000_000
 

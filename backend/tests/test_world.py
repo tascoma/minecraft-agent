@@ -98,9 +98,16 @@ def test_tools_in_status():
     assert 'tools: stone_pickaxe, wooden_axe.' in world.describe_status(state)
 
 
-def test_status_names_the_world():
-    assert 'World id: seed-ab12 ' in world.describe_status(make_state(world_id='seed-ab12'))
-    assert 'World id' not in world.describe_status(make_state())
+def test_status_leaves_out_the_world_id():
+    assert 'seed-ab12' not in world.describe_status(make_state(world_id='seed-ab12'))
+
+
+def test_status_leads_a_message_and_comes_off_again():
+    message = world.with_status('Steve: get wood', 'Your status: fine.')
+    assert message == '[Status] Your status: fine.\nSteve: get wood'
+    assert world.without_status(message) == 'Steve: get wood'
+    assert world.without_status('Steve: [Status] hi') == 'Steve: [Status] hi', 'only a leading status line'
+    assert world.without_status('[Status] no newline') == '[Status] no newline'
 
 
 def test_status_says_whether_it_is_following():

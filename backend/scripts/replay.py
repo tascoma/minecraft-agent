@@ -4,7 +4,7 @@ numbers before and after each optimization phase. Calls the real model, so it co
 
     uv run python backend/scripts/replay.py [--effort low] [--label baseline]
 
-Messages come from backend/scripts/replay-messages.json ("optional": true means answering with no tool
+The stub state moves, ages and gets hungry a little between messages. Messages come from backend/scripts/replay-messages.json ("optional": true means answering with no tool
 is also fine). Each is a fresh conversation unless it sets "fresh": false (a follow-up to the message
 before it). Writes the run lines to
 backend/logs/replay-<label>-<time>.log (not agent.log, so it stays out of the real numbers), prints
@@ -51,12 +51,14 @@ def main() -> None:
     run_logger.setLevel(logging.INFO)
 
     messages = json.loads((BACKEND / 'scripts' / 'replay-messages.json').read_text())
-    state = make_state()
     misses = 0
 
     async def run_all() -> None:
         nonlocal misses
-        for item in messages:
+        for i, item in enumerate(messages):
+            # The status line changes on nearly every real message (position, time, hunger), so it does
+            # here too. With one fixed state the cache would look better than it is.
+            state = make_state(position={'x': 10 + i * 7, 'y': 64, 'z': -3 - i * 5}, time_of_day=1000 + i * 150, food=20 - i % 7)
             if item.get('fresh', True):
                 memory._conversations.clear()
             response = await chat_route.chat(ChatRequest(username='Replay', message=item['say'], state=state))
