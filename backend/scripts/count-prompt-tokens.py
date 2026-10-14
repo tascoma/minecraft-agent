@@ -6,7 +6,7 @@
 Runs the agent once against a stub model to capture the tool definitions and instructions it would
 send, then counts them separately: the tools alone, the instructions, and the status line a
 typical state adds. Needs ANTHROPIC_API_KEY (from .env). Fills in the table in
-docs/plans/optimization-plan.md.
+docs/plans/archive/optimization-plan.md.
 """
 import asyncio
 import sys

@@ -2,7 +2,7 @@
 
 How to make the companion cheaper and quicker to answer: fewer Claude calls, fewer model requests per call, fewer tokens per request, and less work in the bot on each chat. Each phase builds on the ones before it.
 
-See [architecture.md](../architecture.md) for how the pieces fit together, and the [survival functionality plan](archive/survival-functionality-plan.md) for the format this plan follows.
+All five phases are done and merged. The measured results are in each phase's "Result" section and in "Where this ended up" under Phase 5. See [architecture.md](../../architecture.md) for how the pieces fit together (including "What a chat costs"), and the [survival functionality plan](survival-functionality-plan.md) for the format this plan follows.
 
 **How to read the tables:**
 
