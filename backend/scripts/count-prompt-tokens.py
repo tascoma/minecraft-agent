@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Measure what each part of the agent's prompt costs, with Anthropic's free count_tokens endpoint.
 
-    uv run python scripts/count-prompt-tokens.py
+    uv run python backend/scripts/count-prompt-tokens.py
 
 Runs the agent once against a stub model to capture the tool definitions and instructions it would
 send, then counts them separately: the tools alone, the instructions with no bot state, and the
@@ -12,8 +12,8 @@ import asyncio
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / 'backend'), str(ROOT / 'backend' / 'tests')]
+BACKEND = Path(__file__).resolve().parents[1]
+sys.path[:0] = [str(BACKEND), str(BACKEND / 'tests')]
 
 from anthropic import Anthropic  # noqa: E402
 from pydantic_ai.messages import ModelResponse, TextPart  # noqa: E402

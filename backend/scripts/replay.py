@@ -2,12 +2,13 @@
 """Replay a fixed set of chat messages against the real agent with a stub bot state, to get comparable
 numbers before and after each optimization phase. Calls the real model, so it costs a few cents.
 
-    uv run python scripts/replay.py [--effort low] [--label baseline]
+    uv run python backend/scripts/replay.py [--effort low] [--label baseline]
 
-Messages come from scripts/replay-messages.json ("optional": true means answering with no tool is also fine). Each is a fresh conversation unless it sets
-"fresh": false (a follow-up to the message before it). Writes the run lines to
+Messages come from backend/scripts/replay-messages.json ("optional": true means answering with no tool
+is also fine). Each is a fresh conversation unless it sets "fresh": false (a follow-up to the message
+before it). Writes the run lines to
 backend/logs/replay-<label>-<time>.log (not agent.log, so it stays out of the real numbers), prints
-the tools called against the ones expected, then feed the file to scripts/token-report.py.
+the tools called against the ones expected, then feed the file to backend/scripts/token-report.py.
 Uses a temporary data dir, so it never touches saved places, notes or chests.
 """
 import argparse
@@ -20,9 +21,9 @@ import tempfile
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+BACKEND = Path(__file__).resolve().parents[1]
 os.environ['DATA_DIR'] = tempfile.mkdtemp(prefix='minecraft-agent-replay-')
-sys.path[:0] = [str(ROOT / 'backend'), str(ROOT / 'backend' / 'tests')]
+sys.path[:0] = [str(BACKEND), str(BACKEND / 'tests')]
 
 
 def main() -> None:
@@ -40,7 +41,7 @@ def main() -> None:
 
     settings = chat_route.settings
     chat_route.budget = Budget(0, settings.model_name)  # no limit for the replay
-    log_file = ROOT / 'backend' / 'logs' / f'replay-{args.label}-{time.strftime("%Y%m%dT%H%M%S")}.log'
+    log_file = BACKEND / 'logs' / f'replay-{args.label}-{time.strftime("%Y%m%dT%H%M%S")}.log'
     log_file.parent.mkdir(exist_ok=True)
     handler = logging.FileHandler(log_file, encoding='utf-8')
     handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
@@ -48,7 +49,7 @@ def main() -> None:
     run_logger.addHandler(handler)
     run_logger.setLevel(logging.INFO)
 
-    messages = json.loads((ROOT / 'scripts' / 'replay-messages.json').read_text())
+    messages = json.loads((BACKEND / 'scripts' / 'replay-messages.json').read_text())
     state = make_state()
     misses = 0
 
@@ -69,7 +70,7 @@ def main() -> None:
 
     asyncio.run(run_all())
     print(f'\n{len(messages) - misses}/{len(messages)} as expected. Run lines: {log_file}')
-    print(f'Report: python3 scripts/token-report.py {log_file}')
+    print(f'Report: python3 backend/scripts/token-report.py {log_file}')
 
 
 if __name__ == '__main__':

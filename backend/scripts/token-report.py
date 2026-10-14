@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Sum up the agent's `run {json}` log lines (backend/logs/agent.log*) by kind of run.
 
-    python3 scripts/token-report.py [--since 2026-10-13T18:40] [--model claude-haiku-5-5] [--effort low] [LOGFILE ...]
+    python3 backend/scripts/token-report.py [--since 2026-10-13T18:40] [--model claude-haiku-5-5] [--effort low] [LOGFILE ...]
 
 Prints, per kind: runs, average and p90 of input / cached / cache-write / output tokens, requests,
 cost and latency, plus the cache hit rate (cached share of input tokens) and the share of runs
@@ -15,7 +15,7 @@ import statistics
 from collections import defaultdict
 from pathlib import Path
 
-LOG_DIR = Path(__file__).resolve().parents[1] / 'backend' / 'logs'
+LOG_DIR = Path(__file__).resolve().parents[1] / 'logs'
 LINE = re.compile(r'^(?P<at>\d{4}-\d\d-\d\d \d\d:\d\d:\d\d),\d+ \w+ app\.run: run (?P<json>\{.*\})$')
 FIELDS = ('input', 'cached', 'cache_writes', 'output', 'requests', 'cost', 'seconds')
 

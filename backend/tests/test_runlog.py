@@ -49,7 +49,7 @@ def test_token_report_sums_run_lines(tmp_path):
     import importlib.util
     from pathlib import Path
 
-    spec = importlib.util.spec_from_file_location('token_report', Path(__file__).parents[2] / 'scripts' / 'token-report.py')
+    spec = importlib.util.spec_from_file_location('token_report', Path(__file__).parents[1] / 'scripts' / 'token-report.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     record = {'kind': 'chat', 'user': 'S', 'model': 'm', 'effort': None, 'seconds': 2.0, 'input': 1000, 'cached': 800,

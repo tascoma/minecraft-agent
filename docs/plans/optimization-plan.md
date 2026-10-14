@@ -57,11 +57,11 @@ Nothing else gets judged without this. Baseline numbers are at the end of this p
 | Also log the run's tool names and its kind as one structured line (JSON), so it can be grepped and summed. Write the line on every path, not only success: today the empty-reply fallback (`routes/chat.py:148-161`) and the over-budget path (`:132-134`) log no usage or latency. Kinds: `chat`, `event`, `fallback`, `error`, `over_budget` | n/a | `routes/chat.py`, `services/runlog.py` | ✅ |
 | Log thinking separately: `RunUsage.output_tokens` lumps thinking and reply text together, so also log the count and length of each run's `ThinkingPart`s. Run the replay set at both `medium` and `low` effort | n/a | `services/runlog.py` | ✅ |
 | Pin pydantic-ai and set effort through `AnthropicModelSettings(anthropic_effort=…)` (see ground rules) | n/a | `pyproject.toml`, `core/config.py` (`EFFORT`), `agents/agent.py` | ✅ |
-| `scripts/token-report.py`: reads the logs and prints, by message kind, the average and p90 input, cached, written and output tokens, requests, $ and latency, plus the cache hit rate and the share of runs that used thinking | n/a | `scripts/token-report.py` | ✅ |
-| Measure each prompt part on its own with Anthropic's `count_tokens` endpoint (tools, instructions, a typical status line), and fill in the table above. History isn't counted separately; read it off the run logs | n/a | `scripts/count-prompt-tokens.py` | ✅ |
-| A fixed replay set of 32 chat messages (commands, questions, small talk, multi-job requests, follow-ups). `scripts/replay.py` runs it against the real agent with a stub state and a temporary data dir, writes the run lines to `backend/logs/replay-<label>-<time>.log`, and prints the tools called against the ones expected. It's a script, not a pytest test: it spends real money, and the test suite's fake API key would get in the way. That's the baseline for every later phase | n/a | `scripts/replay.py`, `scripts/replay-messages.json` | ✅ |
+| `backend/scripts/token-report.py`: reads the logs and prints, by message kind, the average and p90 input, cached, written and output tokens, requests, $ and latency, plus the cache hit rate and the share of runs that used thinking | n/a | `backend/scripts/token-report.py` | ✅ |
+| Measure each prompt part on its own with Anthropic's `count_tokens` endpoint (tools, instructions, a typical status line), and fill in the table above. History isn't counted separately; read it off the run logs | n/a | `backend/scripts/count-prompt-tokens.py` | ✅ |
+| A fixed replay set of 32 chat messages (commands, questions, small talk, multi-job requests, follow-ups). `backend/scripts/replay.py` runs it against the real agent with a stub state and a temporary data dir, writes the run lines to `backend/logs/replay-<label>-<time>.log`, and prints the tools called against the ones expected. It's a script, not a pytest test: it spends real money, and the test suite's fake API key would get in the way. That's the baseline for every later phase | n/a | `backend/scripts/replay.py`, `backend/scripts/replay-messages.json` | ✅ |
 
-**Baseline** (2026-10-13, claude-haiku-5-5, stub state, 32 messages; `python3 scripts/token-report.py backend/logs/replay-*.log`):
+**Baseline** (2026-10-13, claude-haiku-5-5, stub state, 32 messages; `python3 backend/scripts/token-report.py backend/logs/replay-*.log`):
 
 | | Default effort (medium) | `EFFORT=low` |
 |---|---|---|
@@ -76,7 +76,7 @@ Nothing else gets judged without this. Baseline numbers are at the end of this p
 
 The cache hit rate here is inflated: the replay sends 32 messages back to back with the same stub state, and the low run started within 5 minutes of the first, so it read the first run's cache. Take the real rate from `agent.log` after real play.
 
-Prompt parts (`scripts/count-prompt-tokens.py`): tool definitions 7.3k tokens (46 tools, more than the ~5k estimated), instructions 0.84k with no bot state, 0.92k with a typical state (0.085k of that is state-dependent).
+Prompt parts (`backend/scripts/count-prompt-tokens.py`): tool definitions 7.3k tokens (46 tools, more than the ~5k estimated), instructions 0.84k with no bot state, 0.92k with a typical state (0.085k of that is state-dependent).
 
 What the baseline says:
 
