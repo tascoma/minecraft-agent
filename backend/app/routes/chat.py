@@ -5,7 +5,15 @@ import time
 from fastapi import APIRouter
 from pydantic_ai import capture_run_messages
 from pydantic_ai.exceptions import UnexpectedModelBehavior
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    ToolCallPart,
+    ToolReturnPart,
+    UserPromptPart,
+)
 from pydantic_ai.usage import RunUsage
 
 from app.agents.agent import NO_STATE, OUTPUT_TYPES, ChatDeps, agent
@@ -14,7 +22,7 @@ from app.services import world
 from app.services.memory import memory
 from app.core.config import get_settings
 from app.services.budget import Budget, basic_command
-from app.services.commands import COMMANDS, exact_command, exchange, is_small_talk
+from app.services.commands import COMMANDS, asks_about_spend, exact_command, exchange, is_small_talk
 from app.services.chests import Chest, get_chest_store
 from app.services.journal import Event, get_journal
 from app.services.places import get_place_store, protected_spots
@@ -169,13 +177,44 @@ async def record_event(report: EventReport, world: str | None = None) -> ChatRes
     return response
 
 
+def spent_phrase(amount: float) -> str:
+    """"nothing", "less than $0.0001", "about $0.0042" (small amounts keep their digits) or "about $0.10"."""
+    if amount <= 0:
+        return 'nothing'
+    if amount < 0.0001:
+        return 'less than $0.0001'
+    return f'about ${amount:.4f}' if amount < 0.01 else f'about ${amount:.2f}'
+
+
+def spend_reply() -> str:
+    """What the bot has cost in the last hour, from the budget."""
+    spent = spent_phrase(budget.spent())
+    if budget.dollars_per_hour <= 0:
+        return f"I've spent {spent} on thinking in the last hour, and there is no limit set."
+    reply = f"I've spent {spent} of my ${budget.dollars_per_hour:.2f} hourly budget in the last hour."
+    if budget.exhausted():
+        reply += f' That is all of it, so I only follow, stay and come for about {budget.minutes_until_free()} min.'
+    return reply
+
+
 def answer_without_agent(request: ChatRequest) -> ChatResponse | None:
     """An exact command ("stay", "follow me") or small talk ("lol") is handled here, with no agent run,
     whatever the budget. Anything else, including a longer message that merely contains a command, is
     None and goes to the agent."""
     started = time.perf_counter()
     world_id = request.state.world_id if request.state else None
-    command = exact_command(request.message)
+    name = settings.mc_username
+    if asks_about_spend(request.message, name):
+        reply = spend_reply()
+        prompt = f'{request.username}: {request.message}'
+        memory.remember(
+            request.username,
+            [ModelRequest(parts=[UserPromptPart(content=prompt)]), ModelResponse(parts=[TextPart(content=reply)])],
+            world_id,
+        )
+        log_run('fast', username=request.username, model=settings.model_name, seconds=time.perf_counter() - started)
+        return ChatResponse(reply=reply)
+    command = exact_command(request.message, name)
     if command:
         spec = COMMANDS[command]
         messages = exchange(command, f'{request.username}: {request.message}', request.username)
@@ -186,7 +225,7 @@ def answer_without_agent(request: ChatRequest) -> ChatResponse | None:
         )
         return ChatResponse(reply=spec.reply, actions=[action])
     # "ok" after the bot asked something is an answer, not small talk.
-    if is_small_talk(request.message) and not memory.asked_question(request.username, world_id):
+    if is_small_talk(request.message, name) and not memory.asked_question(request.username, world_id):
         log_run('small_talk', username=request.username, model=settings.model_name, seconds=time.perf_counter() - started)
         return ChatResponse(reply='')
     return None

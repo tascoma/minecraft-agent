@@ -57,3 +57,35 @@ async def test_status_leads_the_message_and_stays_out_of_the_instructions():
     assert second.startswith('[Status] Your status: health 3/20')
     assert 'health' not in (first_instructions or '')
     assert first_instructions == second_instructions
+
+
+async def test_tool_definitions_stay_under_their_size_limit():
+    """Every tool is sent on every request, so each one adds tokens to every message. This fails when the
+    definitions grow past the limit; raise the limit on purpose, after measuring with
+    `uv run python backend/scripts/count-prompt-tokens.py`, not to make the test pass.
+
+    Measured 2026-10-14 with count_tokens on Haiku 5.5: 7,287 tokens for 16,878 characters of JSON (2.32
+    characters per token). The limit is about 8,000 tokens, so a handful of tools or a long new description
+    fits, and a large one is a decision.
+    """
+    import json
+
+    from pydantic_ai.messages import ModelResponse, TextPart
+    from pydantic_ai.models.function import FunctionModel
+
+    from app.agents.agent import OUTPUT_TYPES
+
+    seen = []
+
+    def stub(messages, info):
+        seen.extend(
+            {'name': t.name, 'description': t.description or '', 'input_schema': t.parameters_json_schema}
+            for t in [*info.function_tools, *info.output_tools]
+        )
+        return ModelResponse(parts=[TextPart('ok')])
+
+    with agent.override(model=FunctionModel(stub)):
+        await agent.run('hi', deps=ChatDeps(username='Steve'), output_type=OUTPUT_TYPES)
+    size = len(json.dumps(seen, separators=(',', ':')))
+    assert len(seen) >= 40, 'the action tools must be sent too'
+    assert size <= 18_600, f'tool definitions are {size} characters (about {size / 2.32:.0f} tokens); the limit is 18,600 (about 8,000)'

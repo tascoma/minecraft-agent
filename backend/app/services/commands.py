@@ -52,20 +52,52 @@ LAUGHTER = re.compile(r'^(lo+l+|lmao+|ha(ha)+h?|he(he)+h?)$')
 FILLER = frozenset({'please', 'pls', 'plz'})
 
 
-def normalize(message: str) -> str:
-    """Lowercase, without punctuation or "please": "Follow me, please!" -> "follow me"."""
-    words = re.sub(r'[^\w\s]', ' ', message.lower()).split()
-    return ' '.join(w for w in words if w not in FILLER)
+# Asking what the bot has cost. Answered from the budget, so it is free and always right.
+SPEND_PHRASES = frozenset(
+    {
+        'how much have you spent',
+        'how much did you spend',
+        'how much have you spent so far',
+        'how much money have you spent',
+        'how much money did you spend',
+        'what have you spent',
+        'how much have you used',
+        'how much do you cost',
+        'how much have you cost',
+        'what is your budget',
+        'what s your budget',
+        'whats your budget',
+        'how much budget is left',
+        'how much budget do you have left',
+    }
+)
 
 
-def exact_command(message: str) -> str | None:
+def normalize(message: str, bot_name: str | None = None) -> str:
+    """Lowercase, without punctuation, "please" or the bot's name at either end:
+    "Claude, follow me, please!" -> "follow me"."""
+    words = [w for w in re.sub(r'[^\w\s]', ' ', message.lower()).split() if w not in FILLER]
+    name = (bot_name or '').lower()
+    if name and len(words) > 1:
+        if words[0] == name:
+            words = words[1:]
+        elif words[-1] == name:
+            words = words[:-1]
+    return ' '.join(words)
+
+
+def exact_command(message: str, bot_name: str | None = None) -> str | None:
     """'stay', 'follow' or 'come' when the whole message is just that command, else None."""
-    return PHRASES.get(normalize(message))
+    return PHRASES.get(normalize(message, bot_name))
 
 
-def is_small_talk(message: str) -> bool:
+def asks_about_spend(message: str, bot_name: str | None = None) -> bool:
+    return normalize(message, bot_name) in SPEND_PHRASES
+
+
+def is_small_talk(message: str, bot_name: str | None = None) -> bool:
     """Laughter, "ok", "thanks", or only emoji and symbols (a lone "?" is a question, not small talk)."""
-    text = normalize(message)
+    text = normalize(message, bot_name)
     if text in SMALL_TALK or LAUGHTER.match(text):
         return True
     stripped = message.strip()

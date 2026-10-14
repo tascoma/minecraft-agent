@@ -42,7 +42,7 @@ cd bot && npm install       # Node deps
 
 Each world keeps its own saved places, chest contents and chat memory. The bot tells worlds apart by their seed, so reopening a world on a new LAN port is still the same world; the id is logged on join (`world: seed-…`). Two worlds with the same seed share data unless you name them with `MC_WORLD` in `.env`.
 
-Claude costs are capped at `BUDGET_DOLLARS_PER_HOUR` in `.env` (default $0.50). Past it, the bot stops asking Claude for the rest of that hour but still follows, stays, comes when called, fights and eats. Prompt caching keeps a typical message well under a cent. `REACT_TO_EVENTS=true` lets the bot's agent speak up by itself when a job fails or the bot dies (off by default, since each reaction costs a little).
+Claude costs are capped at `BUDGET_DOLLARS_PER_HOUR` in `.env` (default $0.50). Past it, the bot stops asking Claude for the rest of that hour but still follows, stays, comes when called, fights and eats. Prompt caching keeps a message that reaches Claude to about three hundredths of a cent (the first one after an hour of quiet, with the cache cold, about two tenths); exact commands ("stop", "follow me", "come here") and small talk ("lol", "thanks") never reach Claude and cost nothing. Ask the bot "how much have you spent?" to see what it has cost in the last hour. `EFFORT=low` in `.env` trims about a quarter more. `REACT_TO_EVENTS=true` lets the bot's agent speak up by itself when a job fails or the bot dies (off by default, since each reaction costs a little).
 
 Teleporting (`"tp to me"`) needs commands allowed: choose **Allow Cheats: ON** when you open the world to LAN.
 
