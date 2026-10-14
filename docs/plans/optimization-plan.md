@@ -162,7 +162,7 @@ The biggest savings: a call that never happens costs nothing and answers instant
 - Latency did not improve and varies run to run (1.7–2.2 s) with the model's own time; take it as flat.
 - The replay is mostly fresh conversations, so it shows the instructions and tool layers. The history layer (the moving breakpoint) gains more in real play with longer conversations; read the real rate from `agent.log` after play.
 - Kept conversations drop the status line (`memory.compact`), so the stored history differs from what was sent for the latest exchange only; everything older is identical and reads from the cache.
-- The one-hour write was not exercised by the replay (the tool block was still cached from an earlier 5-minute run, and a one-hour request can read that). It is verified separately below.
+- The one-hour write was not exercised by the replay (the tool block was still cached from an earlier 5-minute run, and a one-hour request can read that). It was verified once the entry had expired: the first message afterwards wrote 8,240 tokens, 7,196 of them (the tool block) at the one-hour rate, and the logged cost matched the 2x price.
 - Cheap guardrail for Phase 5: a test that the instructions don't change when only the status does (added: `test_status_leads_the_message_and_stays_out_of_the_instructions`).
 
 ## Phase 4: Bot-side performance
